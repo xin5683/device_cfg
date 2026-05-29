@@ -30,6 +30,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Cache build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: .github/docker/build.Dockerfile
+          build-args: |
+            BUILD_IMAGE=${{ matrix.image }}
+          tags: device-cfg-build:${{ matrix.target }}
+          load: true
+          cache-from: type=gha,scope=device-cfg-build-image-${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=device-cfg-build-image-${{ matrix.target }}
+          pull: true
+
       - name: Build
         run: |
           docker run --rm \
@@ -38,7 +54,7 @@ jobs:
             -e HOST_GID="$(id -g)" \
             -v "${PWD}:/work" \
             -w "/work" \
-            "${{ matrix.image }}" \
+            "device-cfg-build:${{ matrix.target }}" \
             sh -c 'cargo build --release --target "${TARGET}" && chown -R "${HOST_UID}:${HOST_GID}" target'
 
       - name: Package
