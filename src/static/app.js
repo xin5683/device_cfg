@@ -51,11 +51,12 @@
 
     function renderStatus(s) {
         var connected = s.state === "COMPLETED";
+        var stateText = connected ? "已连接" : stateLabel(s.state);
         var html = "";
 
         html += '<div class="status-row"><span class="status-label">状态</span>';
         html += '<span class="status-value ' + (connected ? "status-connected" : "status-disconnected") + '">';
-        html += connected ? "已连接" : "未连接";
+        html += escapeHtml(stateText);
         html += "</span></div>";
 
         if (connected && s.ssid) {
@@ -71,6 +72,11 @@
         if (connected && s.bssid) {
             html += '<div class="status-row"><span class="status-label">BSSID</span>';
             html += '<span class="status-value">' + escapeHtml(s.bssid) + "</span></div>";
+        }
+
+        if (!connected && s.state && s.state !== "DISCONNECTED") {
+            html += '<div class="status-row"><span class="status-label">阶段</span>';
+            html += '<span class="status-value">' + escapeHtml(s.state) + "</span></div>";
         }
 
         statusContent.innerHTML = html;
@@ -250,6 +256,14 @@
         setTimeout(function () {
             toast.style.display = "none";
         }, 3000);
+    }
+
+    function stateLabel(state) {
+        if (state === "SCANNING") return "扫描中";
+        if (state === "ASSOCIATING") return "关联中";
+        if (state === "AUTHENTICATING") return "认证中";
+        if (state === "INACTIVE") return "空闲";
+        return "未连接";
     }
 
     function escapeHtml(str) {

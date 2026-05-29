@@ -7,32 +7,91 @@
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>WiFi 配置</h1>
-        </header>
+    <div class="ambient ambient-a"></div>
+    <div class="ambient ambient-b"></div>
+    <div class="ambient ambient-c"></div>
 
-        <section id="status-section" class="card">
-            <h2>当前状态</h2>
-            <div id="status-content">
-                <p class="status-loading">加载中...</p>
+    <main class="app-shell">
+        <section class="hero glass-panel">
+            <div class="hero-copy">
+                <p class="eyebrow">Wireless Console</p>
+                <h1>WiFi 配置</h1>
+                <p class="hero-text">面向设备侧接入与调试的无线控制台。</p>
             </div>
-            <button id="disconnect-btn" class="btn btn-danger" style="display:none;">断开连接</button>
+            <div class="hero-status">
+                <div class="hero-status-ring" aria-hidden="true">
+                    <span></span>
+                </div>
+                <div class="hero-status-copy">
+                    <p class="hero-status-label">接口</p>
+                    <strong>wlan1</strong>
+                </div>
+            </div>
         </section>
 
-        <section class="card">
-            <div class="section-header">
-                <h2>可用网络</h2>
-                <button id="scan-btn" class="btn btn-primary">扫描</button>
+        <section class="workspace glass-panel">
+            <div class="tabbar" role="tablist" aria-label="功能导航">
+                <button class="tab-chip is-active" type="button" role="tab" aria-selected="true">无线网络</button>
+                <button class="tab-chip" type="button" role="tab" aria-selected="false" disabled>设备概览</button>
+                <button class="tab-chip" type="button" role="tab" aria-selected="false" disabled>诊断工具</button>
+                <button class="tab-chip" type="button" role="tab" aria-selected="false" disabled>更多能力</button>
             </div>
-            <div id="network-list">
-                <p class="hint">点击"扫描"按钮搜索 WiFi 网络</p>
+
+            <div class="control-grid">
+                <section class="status-card section-card">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Connection</p>
+                            <h2>连接状态</h2>
+                        </div>
+                        <span class="panel-badge">wlan1</span>
+                    </div>
+                    <div id="status-content">
+                        <p class="status-loading">加载中...</p>
+                    </div>
+                    <button id="disconnect-btn" class="btn btn-danger" style="display:none;">断开连接</button>
+                </section>
+
+                <section class="network-card section-card">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Networks</p>
+                            <h2>可用网络</h2>
+                        </div>
+                        <button id="scan-btn" class="btn btn-primary">扫描网络</button>
+                    </div>
+                    <div class="subtle-strip">
+                        <span>选择热点后输入密码即可发起连接</span>
+                    </div>
+                    <div id="network-list">
+                        <p class="hint">点击“扫描网络”开始搜索周围热点</p>
+                    </div>
+                </section>
             </div>
+
+            <section class="expansion-strip">
+                <article class="future-card">
+                    <p class="section-kicker">Reserved</p>
+                    <h3>设备概览</h3>
+                    <p>用于补充硬件版本、接口状态与系统信息。</p>
+                </article>
+                <article class="future-card">
+                    <p class="section-kicker">Reserved</p>
+                    <h3>诊断工具</h3>
+                    <p>用于承载日志、抓包、诊断命令等后续能力。</p>
+                </article>
+                <article class="future-card">
+                    <p class="section-kicker">Reserved</p>
+                    <h3>更多能力</h3>
+                    <p>保留后续功能入口，避免当前界面再次重排。</p>
+                </article>
+            </section>
         </section>
-    </div>
+    </main>
 
     <div id="modal" class="modal" style="display:none;">
-        <div class="modal-content">
+        <div class="modal-content glass-panel">
+            <p class="section-kicker">Join Network</p>
             <h3 id="modal-title">连接 WiFi</h3>
             <p id="modal-ssid" class="modal-ssid"></p>
             <div id="password-group" class="form-group">
