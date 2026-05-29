@@ -1,118 +1,77 @@
-# WiFi 配置 Web 管理工具
+# Device Config
 
-基于 Rust + axum 的 WiFi 配置 Web 服务，适用于 Luckfox Lyra Ultra W (Buildroot) 等嵌入式设备。
+基于 Rust + axum 的嵌入式设备控制 Web 前后端，当前内置 WiFi 配置能力，适用于 Luckfox Lyra Ultra W、RK 系列等 Linux 设备。
 
-## 特性
+## 定位
 
-- **前后端分离**: JSON API + 嵌入式前端，API 可独立调用
-- **CORS 支持**: 允许跨域请求，方便开发和测试
-- **单一二进制**: 前端资源通过 `include_str!` 打包，无需额外文件
-- **交叉编译**: 支持 ARM 目标平台 (armv7-unknown-linux-gnueabihf)
+`device_cfg` 不是单纯的 WiFi 配网页，而是面向嵌入式设备控制面的轻量控制台：
+
+- 单一二进制交付，适合设备侧部署
+- 前端静态资源内嵌，无需额外文件系统依赖
+- 后端通过 HTTP API 暴露设备控制能力
+- 当前提供 WiFi 控制，后续可扩展设备概览、诊断工具、日志能力
+
+## 当前能力
+
+- WiFi 扫描
+- WiFi 连接与断开
+- 当前网络状态查询
+- 跨域调用支持
+- `armv7` 与 `aarch64` 交叉编译
 
 ## 快速开始
 
-### 本地开发
+### 本地运行
 
 ```bash
-# 运行（默认端口 80，可通过环境变量修改）
 PORT=3000 cargo run
-
-# 访问
-open http://localhost:3000
 ```
+
+访问 `http://localhost:3000`。
 
 ### 交叉编译
 
 ```bash
-# 编译 ARM 版本
+cargo build --release --target aarch64-unknown-linux-gnu
+ls -lh target/aarch64-unknown-linux-gnu/release/device_cfg
+```
+
+如需 `armv7`：
+
+```bash
 cargo build --release --target armv7-unknown-linux-gnueabihf
-
-# 产物位置
-ls -lh target/armv7-unknown-linux-gnueabihf/release/wifi_cfg
+ls -lh target/armv7-unknown-linux-gnueabihf/release/device_cfg
 ```
 
-### 部署到目标板
+## 部署到设备
 
 ```bash
-# 复制二进制到板子
-scp target/armv7-unknown-linux-gnueabihf/release/wifi_cfg root@<board-ip>:/usr/bin/
-
-# 确保 wpa_supplicant 已运行
-ssh root@<board-ip> "wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf"
-
-# 启动服务
-ssh root@<board-ip> "/usr/bin/wifi_cfg"
-
-# 浏览器访问
-open http://<board-ip>
+scp target/aarch64-unknown-linux-gnu/release/device_cfg root@<board-ip>:/usr/bin/
+ssh root@<board-ip> "sudo env WPA_CTRL_DIR=/run/wpa_supplicant WIFI_IFACE=wlan1 PORT=3000 /usr/bin/device_cfg"
 ```
 
-## API 端点
+访问 `http://<board-ip>:3000`。
 
-所有 API 返回 JSON 格式，支持 CORS 跨域请求。
+## 环境变量
 
-### 扫描 WiFi 网络
+- `PORT`：服务端口，默认 `80`
+- `WPA_CTRL_DIR`：`wpa_supplicant` 控制目录，默认 `/var/run/wpa_supplicant`
+- `WIFI_IFACE`：无线网卡接口名，默认 `wlan0`
 
-```bash
-GET /api/scan
-```
+## API
 
-**响应示例:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "ssid": "MyWiFi",
-      "bssid": "AA:BB:CC:DD:EE:FF",
-      "signal": -45,
-      "security": "WPA2",
-      "frequency": 2437
-    },
-    {
-      "ssid": "OpenNetwork",
-      "bssid": "11:22:33:44:55:66",
-      "signal": -68,
-      "security": "开放",
-      "frequency": 2412
-    }
-  ]
-}
-```
+### `GET /api/scan`
 
-### 获取连接状态
+扫描周边 WiFi。
 
-```bash
-GET /api/status
-```
+### `GET /api/status`
 
-**响应示例:**
-```json
-{
-  "success": true,
-  "data": {
-    "state": "COMPLETED",
-    "ssid": "MyWiFi",
-    "bssid": "AA:BB:CC:DD:EE:FF",
-    "ip": "192.168.1.100"
-  }
-}
-```
+读取当前连接状态。
 
-**state 可能的值:**
-- `COMPLETED` - 已连接
-- `DISCONNECTED` - 未连接
-- `ASSOCIATING` - 正在连接
-- `AUTHENTICATING` - 认证中
+### `POST /api/connect`
 
-### 连接 WiFi
+请求体示例：
 
-```bash
-POST /api/connect
-Content-Type: application/json
-```
-
-**请求体 (加密网络):**
 ```json
 {
   "ssid": "MyWiFi",
@@ -120,125 +79,65 @@ Content-Type: application/json
 }
 ```
 
-**请求体 (开放网络):**
-```json
-{
-  "ssid": "OpenNetwork"
-}
-```
+开放网络可省略 `password`。
 
-**响应:**
-```json
-{
-  "success": true,
-  "data": "连接成功"
-}
-```
+### `POST /api/disconnect`
 
-### 断开连接
+断开当前 WiFi。
 
-```bash
-POST /api/disconnect
-```
+## 架构
 
-**响应:**
-```json
-{
-  "success": true,
-  "data": "已断开连接"
-}
-```
+当前代码按“设备能力 / Web 接口 / 启动装配”分层：
 
-## API 测试示例
-
-使用 `curl` 测试 API：
-
-```bash
-# 扫描网络
-curl http://localhost:3000/api/scan | jq
-
-# 查看状态
-curl http://localhost:3000/api/status | jq
-
-# 连接 WiFi
-curl -X POST http://localhost:3000/api/connect \
-  -H "Content-Type: application/json" \
-  -d '{"ssid":"MyWiFi","password":"mypassword"}'
-
-# 断开连接
-curl -X POST http://localhost:3000/api/disconnect
-```
-
-## 前端独立部署
-
-前端文件位于 `src/static/`，可以用任何静态服务器托管：
-
-```bash
-# 使用 Python 启动静态服务器
-cd src/static
-python3 -m http.server 8080
-
-# 访问 http://localhost:8080
-# 前端会自动调用 API（需要后端服务运行）
-```
-
-## 系统要求
-
-### 目标板
-
-- `wpa_supplicant` 已安装并运行
-- `wpa_cli` 命令可用
-- 控制接口: `/var/run/wpa_supplicant`
-- 网络接口: `wlan0`
-
-### 开发环境
-
-- Rust 1.70+
-- 交叉编译工具链: `arm-linux-gnueabihf-gcc`
-
-## 项目结构
-
-```
-wifi_cfg/
-├── Cargo.toml              # 依赖配置
+```text
+device_cfg/
+├── Cargo.toml
 ├── .cargo/
-│   └── config.toml         # 交叉编译 linker 配置
+│   └── config.toml
 ├── src/
-│   ├── main.rs             # 入口：路由、静态资源、CORS
-│   ├── wifi.rs             # WiFi 操作层（wpa_cli 封装）
-│   ├── handlers.rs         # HTTP 请求处理器
-│   └── static/             # 前端资源（编译时嵌入）
+│   ├── main.rs
+│   ├── app.rs                # 应用启动、配置、路由装配
+│   ├── device/
+│   │   ├── mod.rs
+│   │   └── wifi.rs           # 设备 WiFi 控制服务
+│   ├── web/
+│   │   ├── mod.rs
+│   │   ├── api.rs            # HTTP API
+│   │   └── assets.rs         # 静态资源输出
+│   └── static/
 │       ├── index.html
 │       ├── style.css
 │       └── app.js
-└── target/                 # 编译产物
 ```
+
+这套结构适合继续扩展：
+
+- `device/`：增加设备信息、LED、GPIO、系统状态等能力
+- `web/api.rs`：增加对应控制接口
+- `static/`：扩展前端页签和控制页面
+
+## 运行依赖
+
+目标设备需具备：
+
+- `wpa_supplicant`
+- `wpa_cli`
+- `ip`
+- `udhcpc` 或等价 DHCP 客户端
 
 ## 故障排查
 
-### wpa_cli 命令失败
+### 扫描为空
 
-确保 `wpa_supplicant` 已运行：
-```bash
-wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf
-```
+- 检查天线与接口名是否正确
+- 确认 `wpa_supplicant` 已运行
+- 手工验证 `wpa_cli scan` 与 `wpa_cli scan_results`
 
-检查控制接口是否存在：
-```bash
-ls -l /var/run/wpa_supplicant/wlan0
-```
-
-### 扫描无结果
-
-- 确认天线已连接
-- 等待几秒后重试（扫描需要时间）
-- 检查 `wpa_cli scan_results` 是否有输出
-
-### 连接超时
+### 连接失败
 
 - 检查密码是否正确
-- 确认信号强度足够（>-75 dBm）
-- 查看 `wpa_cli status` 的详细状态
+- 查看 `wpa_cli status`
+- 查看 `wpa_cli list_networks`
 
 ## 许可证
 

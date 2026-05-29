@@ -1,10 +1,14 @@
+use std::sync::Arc;
+
 use axum::{
+    Json,
+    extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 
-use crate::wifi;
+use crate::device::wifi::WifiService;
 
 pub struct Utf8Json<T>(pub T);
 
@@ -36,7 +40,7 @@ pub struct ApiResponse<T: Serialize> {
 
 impl<T: Serialize> ApiResponse<T> {
     fn ok(data: T) -> impl IntoResponse {
-        Utf8Json(ApiResponse {
+        Utf8Json(Self {
             success: true,
             data: Some(data),
             message: None,
@@ -78,17 +82,17 @@ pub struct ConnectRequest {
     pub password: Option<String>,
 }
 
-pub async fn scan_handler() -> impl IntoResponse {
-    match wifi::scan().await {
+pub async fn scan_handler(State(service): State<Arc<WifiService>>) -> impl IntoResponse {
+    match service.scan().await {
         Ok(networks) => {
             let data: Vec<NetworkInfo> = networks
                 .into_iter()
-                .map(|n| NetworkInfo {
-                    ssid: n.ssid,
-                    bssid: n.bssid,
-                    signal: n.signal,
-                    security: n.security,
-                    frequency: n.frequency,
+                .map(|network| NetworkInfo {
+                    ssid: network.ssid,
+                    bssid: network.bssid,
+                    signal: network.signal,
+                    security: network.security,
+                    frequency: network.frequency,
                 })
                 .collect();
             ApiResponse::ok(data).into_response()
@@ -97,14 +101,14 @@ pub async fn scan_handler() -> impl IntoResponse {
     }
 }
 
-pub async fn status_handler() -> impl IntoResponse {
-    match wifi::status().await {
-        Ok(s) => {
+pub async fn status_handler(State(service): State<Arc<WifiService>>) -> impl IntoResponse {
+    match service.status().await {
+        Ok(status) => {
             let data = StatusInfo {
-                state: s.state,
-                ssid: s.ssid,
-                bssid: s.bssid,
-                ip: s.ip,
+                state: status.state,
+                ssid: status.ssid,
+                bssid: status.bssid,
+                ip: status.ip,
             };
             ApiResponse::ok(data).into_response()
         }
@@ -112,20 +116,21 @@ pub async fn status_handler() -> impl IntoResponse {
     }
 }
 
-pub async fn connect_handler(Json(req): Json<ConnectRequest>) -> impl IntoResponse {
-    let password = req.password.as_deref().filter(|p| !p.is_empty());
+pub async fn connect_handler(
+    State(service): State<Arc<WifiService>>,
+    Json(req): Json<ConnectRequest>,
+) -> impl IntoResponse {
+    let password = req.password.as_deref().filter(|value| !value.is_empty());
 
-    match wifi::connect(&req.ssid, password).await {
+    match service.connect(&req.ssid, password).await {
         Ok(()) => ApiResponse::ok("连接成功").into_response(),
         Err(e) => ApiResponse::<&str>::err(e.to_string()).into_response(),
     }
 }
 
-pub async fn disconnect_handler() -> impl IntoResponse {
-    match wifi::disconnect().await {
+pub async fn disconnect_handler(State(service): State<Arc<WifiService>>) -> impl IntoResponse {
+    match service.disconnect().await {
         Ok(()) => ApiResponse::ok("已断开连接").into_response(),
         Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
     }
 }
-
-use axum::Json;
