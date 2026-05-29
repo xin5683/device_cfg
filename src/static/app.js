@@ -4,10 +4,9 @@
     var selectedNetwork = null;
     var statusPollTimer = null;
 
-    var statusContent = document.getElementById("status-content");
+    var heroStatusContent = document.getElementById("hero-status-content");
     var networkList = document.getElementById("network-list");
     var scanBtn = document.getElementById("scan-btn");
-    var heroScanBtn = document.getElementById("hero-scan-btn");
     var disconnectBtn = document.getElementById("disconnect-btn");
     var modal = document.getElementById("modal");
     var modalSsid = document.getElementById("modal-ssid");
@@ -19,18 +18,42 @@
 
     function init() {
         scanBtn.addEventListener("click", doScan);
-        heroScanBtn.addEventListener("click", doScan);
         disconnectBtn.addEventListener("click", doDisconnect);
         connectBtn.addEventListener("click", doConnect);
         cancelBtn.addEventListener("click", closeModal);
         modal.addEventListener("click", function (e) {
-            if (e.target === modal) closeModal();
+            if (e.target === modal || e.target.classList.contains("modal-backdrop")) {
+                closeModal();
+            }
         });
         passwordInput.addEventListener("keydown", function (e) {
             if (e.key === "Enter") doConnect();
         });
 
+        initTabs();
         loadStatus();
+    }
+
+    function initTabs() {
+        var tabItems = document.querySelectorAll(".tab-item");
+        var tabPanels = document.querySelectorAll(".tab-panel");
+
+        tabItems.forEach(function (item) {
+            item.addEventListener("click", function () {
+                if (item.disabled) return;
+
+                var targetTab = item.getAttribute("data-tab");
+
+                tabItems.forEach(function (t) { t.classList.remove("active"); });
+                tabPanels.forEach(function (p) { p.classList.remove("active"); });
+
+                item.classList.add("active");
+                var targetPanel = document.querySelector('[data-panel="' + targetTab + '"]');
+                if (targetPanel) {
+                    targetPanel.classList.add("active");
+                }
+            });
+        });
     }
 
     async function api(path, options) {
@@ -44,10 +67,10 @@
             if (result.success) {
                 renderStatus(result.data);
             } else {
-                statusContent.innerHTML = '<p class="hint">无法获取状态: ' + escapeHtml(result.message) + "</p>";
+                heroStatusContent.innerHTML = '<p class="status-loading">无法获取状态: ' + escapeHtml(result.message) + "</p>";
             }
         } catch (e) {
-            statusContent.innerHTML = '<p class="hint">服务未响应</p>';
+            heroStatusContent.innerHTML = '<p class="status-loading">服务未响应</p>';
         }
     }
 
@@ -56,48 +79,60 @@
         var stateText = connected ? "已连接" : stateLabel(s.state);
         var html = "";
 
-        html += '<div class="status-row"><span class="status-label">状态</span>';
-        html += '<span class="status-value ' + (connected ? "status-connected" : "status-disconnected") + '">';
+        html += '<div class="status-summary">';
+        html += '<div class="status-summary-copy">';
+        html += '<div class="status-summary-title">当前连接状态</div>';
+        html += '<div class="status-summary-subtitle">' + escapeHtml(statusDescription(s.state, connected)) + "</div>";
+        html += "</div>";
+        html += '<div class="status-state ' + (connected ? "connected" : "disconnected") + '">';
         html += escapeHtml(stateText);
-        html += "</span></div>";
+        html += "</div>";
+        html += "</div>";
 
-        if (connected && s.ssid) {
-            html += '<div class="status-row"><span class="status-label">SSID</span>';
-            html += '<span class="status-value">' + escapeHtml(s.ssid) + "</span></div>";
-        }
-
-        if (connected && s.ip) {
-            html += '<div class="status-row"><span class="status-label">IP 地址</span>';
-            html += '<span class="status-value">' + escapeHtml(s.ip) + "</span></div>";
-        }
-
-        if (connected && s.bssid) {
-            html += '<div class="status-row"><span class="status-label">BSSID</span>';
-            html += '<span class="status-value">' + escapeHtml(s.bssid) + "</span></div>";
-        }
-
+        html += '<div class="status-details">';
+        html += renderStatusItem("网络名称", connected && s.ssid ? s.ssid : "未连接");
+        html += renderStatusItem("IP 地址", connected && s.ip ? s.ip : "-");
+        html += renderStatusItem("BSSID", connected && s.bssid ? s.bssid : "-");
         if (!connected && s.state && s.state !== "DISCONNECTED") {
-            html += '<div class="status-row"><span class="status-label">阶段</span>';
-            html += '<span class="status-value">' + escapeHtml(s.state) + "</span></div>";
+            html += renderStatusItem("连接阶段", s.state);
         }
+        html += "</div>";
 
-        statusContent.innerHTML = html;
+        heroStatusContent.innerHTML = html;
         disconnectBtn.style.display = connected ? "block" : "none";
+    }
+
+    function renderStatusItem(label, value) {
+        var html = "";
+        html += '<div class="status-item">';
+        html += '<span class="status-item-label">' + escapeHtml(label) + "</span>";
+        html += '<span class="status-item-value">' + escapeHtml(value) + "</span>";
+        html += "</div>";
+        return html;
+    }
+
+    function statusDescription(state, connected) {
+        if (connected) return "设备已接入无线网络";
+        if (state === "SCANNING") return "正在搜索附近的无线网络";
+        if (state === "ASSOCIATING") return "正在建立接入点连接";
+        if (state === "AUTHENTICATING") return "正在进行身份认证";
+        if (state === "INACTIVE") return "无线接口当前空闲";
+        return "设备当前未连接到无线网络";
     }
 
     async function doScan() {
         setScanBusy(true);
-        networkList.innerHTML = '<p class="status-loading">正在扫描 WiFi 网络，请稍候...</p>';
+        networkList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2" opacity="0.2"/></svg></div><p>正在扫描 WiFi 网络...</p></div>';
 
         try {
             var result = await api("/api/scan");
             if (result.success) {
                 renderNetworks(result.data);
             } else {
-                networkList.innerHTML = '<p class="hint">扫描失败: ' + escapeHtml(result.message) + "</p>";
+                networkList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2" opacity="0.2"/></svg></div><p>扫描失败: ' + escapeHtml(result.message) + "</p></div>";
             }
         } catch (e) {
-            networkList.innerHTML = '<p class="hint">扫描请求失败</p>';
+            networkList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2" opacity="0.2"/></svg></div><p>扫描请求失败</p></div>';
         }
 
         setScanBusy(false);
@@ -105,14 +140,17 @@
 
     function setScanBusy(busy) {
         scanBtn.disabled = busy;
-        heroScanBtn.disabled = busy;
-        scanBtn.innerHTML = busy ? '<span class="spinner"></span>扫描中' : "扫描网络";
-        heroScanBtn.innerHTML = busy ? '<span class="spinner"></span>扫描中' : "立即扫描";
+        var btnContent = scanBtn.querySelector("span");
+        if (busy) {
+            scanBtn.innerHTML = '<span class="spinner"></span><span>扫描中</span>';
+        } else {
+            scanBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 8a6 6 0 11-12 0 6 6 0 0112 0z" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>扫描网络</span>';
+        }
     }
 
     function renderNetworks(networks) {
         if (!networks || networks.length === 0) {
-            networkList.innerHTML = '<p class="hint">未发现 WiFi 网络，请确认天线已连接</p>';
+            networkList.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2" opacity="0.2"/><path d="M12 20a14 14 0 0124 0M16 26a8 8 0 0116 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/></svg></div><p>未发现 WiFi 网络，请确认天线已连接</p></div>';
             return;
         }
 
@@ -126,7 +164,7 @@
             html += '<div class="signal-icon">' + bars + "</div>";
             html += '<div class="network-info">';
             html += '<div class="network-ssid">' + escapeHtml(n.ssid) + "</div>";
-            html += '<div class="network-meta">' + n.signal + " dBm &middot; " + n.frequency + " MHz</div>";
+            html += '<div class="network-meta">' + n.signal + " dBm · " + n.frequency + " MHz</div>";
             html += "</div>";
             html += '<span class="security-badge' + (isOpen ? " open" : "") + '">' + escapeHtml(n.security) + "</span>";
             html += "</div>";
@@ -164,11 +202,11 @@
 
         if (network.security === "开放") {
             passwordGroup.style.display = "none";
-            document.getElementById("modal-title").textContent = "连接开放网络";
+            document.getElementById("modal-title").textContent = "连接到开放网络";
         } else {
             passwordGroup.style.display = "block";
             passwordInput.value = "";
-            document.getElementById("modal-title").textContent = "连接 WiFi";
+            document.getElementById("modal-title").textContent = "连接到网络";
             setTimeout(function () { passwordInput.focus(); }, 100);
         }
 
@@ -192,7 +230,7 @@
         }
 
         connectBtn.disabled = true;
-        connectBtn.innerHTML = '<span class="spinner"></span>连接中';
+        connectBtn.innerHTML = '<span class="spinner"></span><span>连接中</span>';
 
         var body = { ssid: selectedNetwork.ssid };
         if (!isOpen) {
@@ -225,7 +263,7 @@
 
     async function doDisconnect() {
         disconnectBtn.disabled = true;
-        disconnectBtn.innerHTML = '<span class="spinner"></span>断开中';
+        disconnectBtn.innerHTML = '<span class="spinner"></span><span>断开中</span>';
 
         try {
             var result = await api("/api/disconnect", { method: "POST" });
