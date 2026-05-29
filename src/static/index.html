@@ -7,83 +7,110 @@
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <div class="ambient ambient-a"></div>
-    <div class="ambient ambient-b"></div>
-    <div class="ambient ambient-c"></div>
+    <div class="backdrop backdrop-left"></div>
+    <div class="backdrop backdrop-right"></div>
+    <div class="backdrop backdrop-top"></div>
 
-    <main class="app-shell">
-        <section class="hero glass-panel">
-            <div class="hero-copy">
-                <p class="eyebrow">Wireless Console</p>
+    <main class="console-shell">
+        <header class="topbar glass-panel">
+            <div class="brand-block">
+                <p class="eyebrow">设备无线配置</p>
                 <h1>Device Config</h1>
-                <p class="hero-text">面向嵌入式设备控制与接入的统一控制台。</p>
+                <p class="brand-copy">扫描附近热点、连接目标网络并查看当前链路状态。</p>
             </div>
-            <div class="hero-status">
-                <div class="hero-status-ring" aria-hidden="true">
-                    <span></span>
-                </div>
-                <div class="hero-status-copy">
-                    <p class="hero-status-label">接口</p>
+            <div class="topbar-meta">
+                <div class="meta-pill">
+                    <span class="meta-label">接口</span>
                     <strong>wlan1</strong>
                 </div>
+                <div class="meta-pill">
+                    <span class="meta-label">模块</span>
+                    <strong>无线网络</strong>
+                </div>
             </div>
-        </section>
+        </header>
 
         <section class="workspace glass-panel">
             <div class="tabbar" role="tablist" aria-label="功能导航">
                 <button class="tab-chip is-active" type="button" role="tab" aria-selected="true">无线网络</button>
                 <button class="tab-chip" type="button" role="tab" aria-selected="false" disabled>设备概览</button>
                 <button class="tab-chip" type="button" role="tab" aria-selected="false" disabled>诊断工具</button>
-                <button class="tab-chip" type="button" role="tab" aria-selected="false" disabled>更多能力</button>
+                <button class="tab-chip" type="button" role="tab" aria-selected="false" disabled>系统日志</button>
             </div>
 
-            <div class="control-grid">
-                <section class="status-card section-card">
+            <section class="hero-panel">
+                <div class="hero-copy">
+                    <p class="section-kicker">Wireless Network</p>
+                    <h2>设备无线接入</h2>
+                    <p>用于管理设备 WiFi 连接。</p>
+                    <div class="hero-actions">
+                        <button id="hero-scan-btn" class="btn btn-secondary" type="button">立即扫描</button>
+                    </div>
+                </div>
+                <div class="hero-indicator" aria-hidden="true">
+                    <div class="indicator-ring">
+                        <div class="indicator-core"></div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="dashboard-grid">
+                <section class="section-card status-card">
                     <div class="section-header">
                         <div>
-                            <p class="section-kicker">Connection</p>
-                            <h2>连接状态</h2>
+                            <p class="section-kicker">Runtime State</p>
+                            <h3>连接状态</h3>
                         </div>
-                        <span class="panel-badge">wlan1</span>
+                        <span class="panel-badge">live</span>
                     </div>
-                    <div id="status-content">
-                        <p class="status-loading">加载中...</p>
+
+                    <div class="status-frame">
+                        <div class="status-orbit">
+                            <span class="status-orbit-ring"></span>
+                            <span class="status-orbit-core"></span>
+                        </div>
+                        <div id="status-content">
+                            <p class="status-loading">加载中...</p>
+                        </div>
                     </div>
+
                     <button id="disconnect-btn" class="btn btn-danger" style="display:none;">断开连接</button>
                 </section>
 
-                <section class="network-card section-card">
+                <section class="section-card network-card">
                     <div class="section-header">
                         <div>
-                            <p class="section-kicker">Networks</p>
-                            <h2>可用网络</h2>
+                            <p class="section-kicker">Available Access Points</p>
+                            <h3>可用网络</h3>
                         </div>
                         <button id="scan-btn" class="btn btn-primary">扫描网络</button>
                     </div>
-                    <div class="subtle-strip">
-                        <span>选择热点后输入密码即可发起连接</span>
+
+                    <div class="network-toolbar">
+                        <span class="toolbar-label">点击网络条目开始连接，列表按扫描结果即时刷新。</span>
                     </div>
+
                     <div id="network-list">
                         <p class="hint">点击“扫描网络”开始搜索周围热点</p>
                     </div>
                 </section>
             </div>
 
-            <section class="expansion-strip">
-                <article class="future-card">
-                    <p class="section-kicker">Reserved</p>
+            <section class="reserve-panel">
+                <article class="reserve-card">
+                    <p class="section-kicker">Coming Soon</p>
                     <h3>设备概览</h3>
-                    <p>用于补充硬件版本、接口状态与系统信息。</p>
+                    <p>敬请期待</p>
                 </article>
-                <article class="future-card">
-                    <p class="section-kicker">Reserved</p>
+                <article class="reserve-card">
+                    <p class="section-kicker">Coming Soon</p>
                     <h3>诊断工具</h3>
-                    <p>用于承载日志、抓包、诊断命令等后续能力。</p>
+                    <p>敬请期待</p>
                 </article>
-                <article class="future-card">
-                    <p class="section-kicker">Reserved</p>
-                    <h3>更多能力</h3>
-                    <p>保留后续功能入口，避免当前界面再次重排。</p>
+                <article class="reserve-card">
+                    <p class="section-kicker">Coming Soon</p>
+                    <h3>系统日志</h3>
+                    <p>敬请期待</p>
                 </article>
             </section>
         </section>

@@ -7,6 +7,7 @@
     var statusContent = document.getElementById("status-content");
     var networkList = document.getElementById("network-list");
     var scanBtn = document.getElementById("scan-btn");
+    var heroScanBtn = document.getElementById("hero-scan-btn");
     var disconnectBtn = document.getElementById("disconnect-btn");
     var modal = document.getElementById("modal");
     var modalSsid = document.getElementById("modal-ssid");
@@ -18,6 +19,7 @@
 
     function init() {
         scanBtn.addEventListener("click", doScan);
+        heroScanBtn.addEventListener("click", doScan);
         disconnectBtn.addEventListener("click", doDisconnect);
         connectBtn.addEventListener("click", doConnect);
         cancelBtn.addEventListener("click", closeModal);
@@ -84,8 +86,7 @@
     }
 
     async function doScan() {
-        scanBtn.disabled = true;
-        scanBtn.innerHTML = '<span class="spinner"></span>扫描中';
+        setScanBusy(true);
         networkList.innerHTML = '<p class="status-loading">正在扫描 WiFi 网络，请稍候...</p>';
 
         try {
@@ -99,8 +100,14 @@
             networkList.innerHTML = '<p class="hint">扫描请求失败</p>';
         }
 
-        scanBtn.disabled = false;
-        scanBtn.textContent = "扫描";
+        setScanBusy(false);
+    }
+
+    function setScanBusy(busy) {
+        scanBtn.disabled = busy;
+        heroScanBtn.disabled = busy;
+        scanBtn.innerHTML = busy ? '<span class="spinner"></span>扫描中' : "扫描网络";
+        heroScanBtn.innerHTML = busy ? '<span class="spinner"></span>扫描中' : "立即扫描";
     }
 
     function renderNetworks(networks) {
