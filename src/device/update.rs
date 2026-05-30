@@ -174,7 +174,7 @@ fn apply_update(config: UpdateConfig) -> Result<ApplyUpdateResult> {
     let archive_path = tmp_dir.path().join(&asset.name);
     let downloaded_from = download_with_mirrors(&mirror_urls, &archive_path)?;
 
-    let bin_name_in_archive = archive_bin_name(&config);
+    let bin_name_in_archive = archive_bin_name(&config, &asset);
     self_update::Extract::from_source(&archive_path)
         .extract_file(tmp_dir.path(), Path::new(&bin_name_in_archive))?;
 
@@ -367,17 +367,39 @@ fn release_asset_for(config: &UpdateConfig, release: &Release) -> Result<Release
 }
 
 fn find_target_asset(config: &UpdateConfig, release: &Release) -> Option<ReleaseAsset> {
+    let target_candidates = target_candidates(&config.target);
+
     release
         .assets
         .iter()
-        .find(|asset| asset.name.contains(&config.target) && asset.name.contains(&config.bin_name))
+        .find(|asset| {
+            asset.name.contains(&config.bin_name)
+                && target_candidates
+                    .iter()
+                    .any(|target| asset.name.contains(target))
+        })
         .or_else(|| {
-            release
-                .assets
-                .iter()
-                .find(|asset| asset.name.contains(&config.target))
+            release.assets.iter().find(|asset| {
+                target_candidates
+                    .iter()
+                    .any(|target| asset.name.contains(target))
+            })
         })
         .cloned()
+}
+
+fn target_candidates(target: &str) -> Vec<String> {
+    let mut targets = vec![target.to_string()];
+    match target {
+        "aarch64-unknown-linux-gnu" => {
+            targets.push("aarch64-unknown-linux-musl".to_string());
+        }
+        "armv7-unknown-linux-gnueabihf" => {
+            targets.push("armv7-unknown-linux-musleabihf".to_string());
+        }
+        _ => {}
+    }
+    targets
 }
 
 fn is_newer_version(current: &str, latest: &str) -> bool {
@@ -397,10 +419,86 @@ fn mirror_urls(config: &UpdateConfig, url: &str) -> Vec<String> {
     urls
 }
 
-fn archive_bin_name(config: &UpdateConfig) -> String {
-    let mut path = PathBuf::from(format!("{}-{}", config.bin_name, config.target));
+fn archive_bin_name(config: &UpdateConfig, asset: &ReleaseAsset) -> String {
+    let archive_target =
+        asset_target(&config.bin_name, &asset.name).unwrap_or_else(|| config.target.clone());
+    let mut path = PathBuf::from(format!("{}-{}", config.bin_name, archive_target));
     if let Some(ext) = env::consts::EXE_EXTENSION.strip_prefix('.') {
         path.set_extension(ext);
     }
     path.to_string_lossy().into_owned()
+}
+
+fn asset_target(bin_name: &str, asset_name: &str) -> Option<String> {
+    asset_name
+        .strip_prefix(&format!("{bin_name}-"))
+        .and_then(|name| name.strip_suffix(".tar.gz"))
+        .map(ToOwned::to_owned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn release_with_assets(names: &[&str]) -> Release {
+        Release {
+            name: "v0.1.3".to_string(),
+            version: "0.1.3".to_string(),
+            date: "2026-05-30T00:00:00Z".to_string(),
+            body: None,
+            assets: names
+                .iter()
+                .map(|name| ReleaseAsset {
+                    name: (*name).to_string(),
+                    download_url: format!("https://example.com/{name}"),
+                })
+                .collect(),
+        }
+    }
+
+    fn config_for_target(target: &str) -> UpdateConfig {
+        UpdateConfig {
+            repo_owner: DEFAULT_REPO_OWNER.to_string(),
+            repo_name: DEFAULT_REPO_NAME.to_string(),
+            bin_name: DEFAULT_BIN_NAME.to_string(),
+            current_version: "0.1.2".to_string(),
+            target: target.to_string(),
+            github_api_url: DEFAULT_GITHUB_API_URL.to_string(),
+            mirrors: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn matches_armv7_musl_asset_for_gnu_runtime_target() {
+        let config = config_for_target("armv7-unknown-linux-gnueabihf");
+        let release = release_with_assets(&[
+            "device_cfg-aarch64-unknown-linux-musl.tar.gz",
+            "device_cfg-armv7-unknown-linux-musleabihf.tar.gz",
+        ]);
+
+        let asset = find_target_asset(&config, &release).expect("matching asset");
+
+        assert_eq!(
+            asset.name,
+            "device_cfg-armv7-unknown-linux-musleabihf.tar.gz"
+        );
+        assert_eq!(
+            archive_bin_name(&config, &asset),
+            "device_cfg-armv7-unknown-linux-musleabihf"
+        );
+    }
+
+    #[test]
+    fn matches_aarch64_musl_asset_for_gnu_runtime_target() {
+        let config = config_for_target("aarch64-unknown-linux-gnu");
+        let release = release_with_assets(&["device_cfg-aarch64-unknown-linux-musl.tar.gz"]);
+
+        let asset = find_target_asset(&config, &release).expect("matching asset");
+
+        assert_eq!(asset.name, "device_cfg-aarch64-unknown-linux-musl.tar.gz");
+        assert_eq!(
+            archive_bin_name(&config, &asset),
+            "device_cfg-aarch64-unknown-linux-musl"
+        );
+    }
 }
