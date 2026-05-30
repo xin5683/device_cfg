@@ -33,6 +33,7 @@ pub async fn run() {
         .route("/", get(assets::index))
         .route("/style.css", get(assets::style_css))
         .route("/app.js", get(assets::app_js))
+        .route("/api/system/info", get(api::system_info_handler))
         .route("/api/scan", get(api::scan_handler))
         .route("/api/status", get(api::status_handler))
         .route("/api/connect", post(api::connect_handler))

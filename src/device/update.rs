@@ -1,7 +1,7 @@
 use std::{
     env,
     fs::File,
-    io,
+    io::{self, BufRead, BufReader, Read},
     path::{Path, PathBuf},
     sync::OnceLock,
     time::Duration,
@@ -11,6 +11,7 @@ use reqwest::header::{ACCEPT, HeaderMap, USER_AGENT};
 use self_update::update::{Release, ReleaseAsset};
 use semver::Version;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 const DEFAULT_REPO_OWNER: &str = "xin5683";
 const DEFAULT_REPO_NAME: &str = "device_cfg";
@@ -110,7 +111,9 @@ pub struct UpdateInfo {
     pub update_available: bool,
     pub target: String,
     pub asset_name: Option<String>,
+    pub checksum_asset_name: Option<String>,
     pub download_url: Option<String>,
+    pub checksum_download_url: Option<String>,
     pub mirror_urls: Vec<String>,
     pub release_url: String,
     pub release_notes: Option<String>,
@@ -122,6 +125,7 @@ pub struct ApplyUpdateResult {
     pub updated_version: String,
     pub target: String,
     pub asset_name: String,
+    pub sha256: String,
     pub downloaded_from: String,
     pub installed_path: String,
 }
@@ -171,8 +175,16 @@ fn apply_update(config: UpdateConfig) -> Result<ApplyUpdateResult> {
     let tmp_dir = tempfile::Builder::new()
         .prefix("device_cfg_update")
         .tempdir()?;
+    let expected_sha256 = download_expected_sha256(&config, &release, &asset, tmp_dir.path())?;
     let archive_path = tmp_dir.path().join(&asset.name);
     let downloaded_from = download_with_mirrors(&mirror_urls, &archive_path)?;
+    let actual_sha256 = sha256_file(&archive_path)?;
+    if !actual_sha256.eq_ignore_ascii_case(&expected_sha256) {
+        return Err(UpdateError(format!(
+            "更新包 SHA256 校验失败: expected={} actual={}",
+            expected_sha256, actual_sha256
+        )));
+    }
 
     let bin_name_in_archive = archive_bin_name(&config, &asset);
     self_update::Extract::from_source(&archive_path)
@@ -187,6 +199,7 @@ fn apply_update(config: UpdateConfig) -> Result<ApplyUpdateResult> {
         updated_version: release.version,
         target: config.target,
         asset_name: asset.name,
+        sha256: actual_sha256,
         downloaded_from,
         installed_path: install_path.display().to_string(),
     })
@@ -329,7 +342,13 @@ fn release_asset_from_json(asset: &serde_json::Value) -> Result<ReleaseAsset> {
 
 fn build_update_info(config: &UpdateConfig, release: &Release) -> UpdateInfo {
     let asset = find_target_asset(config, release);
+    let checksum_asset = asset
+        .as_ref()
+        .and_then(|asset| find_checksum_asset(release, asset));
     let download_url = asset.as_ref().map(|asset| asset.download_url.clone());
+    let checksum_download_url = checksum_asset
+        .as_ref()
+        .map(|asset| asset.download_url.clone());
     let mirror_urls = download_url
         .as_deref()
         .map(|url| mirror_urls(config, url))
@@ -341,7 +360,9 @@ fn build_update_info(config: &UpdateConfig, release: &Release) -> UpdateInfo {
         update_available: is_newer_version(&config.current_version, &release.version),
         target: config.target.clone(),
         asset_name: asset.map(|asset| asset.name),
+        checksum_asset_name: checksum_asset.map(|asset| asset.name),
         download_url,
+        checksum_download_url,
         mirror_urls,
         release_url: format!(
             "https://github.com/{}/{}/releases/tag/v{}",
@@ -386,6 +407,86 @@ fn find_target_asset(config: &UpdateConfig, release: &Release) -> Option<Release
             })
         })
         .cloned()
+}
+
+fn find_checksum_asset(release: &Release, asset: &ReleaseAsset) -> Option<ReleaseAsset> {
+    let checksum_name = checksum_asset_name(&asset.name);
+    release
+        .assets
+        .iter()
+        .find(|candidate| candidate.name == checksum_name)
+        .cloned()
+}
+
+fn checksum_asset_name(asset_name: &str) -> String {
+    format!("{asset_name}.sha256")
+}
+
+fn download_expected_sha256(
+    config: &UpdateConfig,
+    release: &Release,
+    asset: &ReleaseAsset,
+    tmp_dir: &Path,
+) -> Result<String> {
+    let checksum_asset = find_checksum_asset(release, asset).ok_or_else(|| {
+        UpdateError(format!(
+            "未找到更新包校验文件: {}",
+            checksum_asset_name(&asset.name)
+        ))
+    })?;
+    let checksum_path = tmp_dir.join(&checksum_asset.name);
+    let urls = mirror_urls(config, &checksum_asset.download_url);
+    download_with_mirrors(&urls, &checksum_path)?;
+    parse_sha256_file(&checksum_path, &asset.name)
+}
+
+fn parse_sha256_file(path: &Path, asset_name: &str) -> Result<String> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    for line in reader.lines() {
+        let line = line?;
+        let mut parts = line.split_whitespace();
+        let Some(hash) = parts.next() else {
+            continue;
+        };
+        if !is_sha256_hex(hash) {
+            continue;
+        }
+        let file_name = parts
+            .next()
+            .map(|value| value.trim_start_matches('*'))
+            .unwrap_or(asset_name);
+        let base_name = Path::new(file_name)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(file_name);
+        if base_name == asset_name {
+            return Ok(hash.to_ascii_lowercase());
+        }
+    }
+
+    Err(UpdateError(format!(
+        "校验文件未包含有效 SHA256: {}",
+        path.display()
+    )))
+}
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn sha256_file(path: &Path) -> Result<String> {
+    let mut file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn target_candidates(target: &str) -> Vec<String> {

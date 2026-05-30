@@ -74,10 +74,22 @@ pub struct StatusInfo {
     pub ip: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct SystemInfo {
+    pub version: &'static str,
+}
+
 #[derive(Deserialize)]
 pub struct ConnectRequest {
     pub ssid: String,
     pub password: Option<String>,
+}
+
+pub async fn system_info_handler() -> impl IntoResponse {
+    ApiResponse::ok(SystemInfo {
+        version: env!("CARGO_PKG_VERSION"),
+    })
+    .into_response()
 }
 
 pub async fn scan_handler(State(state): State<AppState>) -> impl IntoResponse {

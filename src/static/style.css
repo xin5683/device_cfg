@@ -170,8 +170,25 @@ body {
 .brand-title {
     font-size: 17px;
     font-weight: 600;
-    letter-spacing: -0.02em;
     color: var(--color-text-primary);
+}
+
+.version-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 6px 12px;
+    border-radius: var(--radius-full);
+    background: rgba(0, 0, 0, 0.04);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.version-pill strong {
+    color: var(--color-text-primary);
+    font-weight: 700;
 }
 
 /* ==================== 主内容区 ==================== */

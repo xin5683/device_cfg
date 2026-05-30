@@ -20,6 +20,7 @@
     var updateTitle = document.getElementById("update-title");
     var updateSummary = document.getElementById("update-summary");
     var updateDetails = document.getElementById("update-details");
+    var systemVersion = document.getElementById("system-version");
 
     function init() {
         scanBtn.addEventListener("click", doScan);
@@ -38,6 +39,7 @@
         updateApplyBtn.addEventListener("click", applyUpdate);
 
         initTabs();
+        loadSystemInfo();
         loadStatus();
     }
 
@@ -78,6 +80,19 @@
             }
         } catch (e) {
             heroStatusContent.innerHTML = '<p class="status-loading">服务未响应</p>';
+        }
+    }
+
+    async function loadSystemInfo() {
+        try {
+            var result = await api("/api/system/info");
+            if (result.success && result.data && result.data.version) {
+                systemVersion.textContent = "v" + result.data.version;
+            } else {
+                systemVersion.textContent = "-";
+            }
+        } catch (e) {
+            systemVersion.textContent = "-";
         }
     }
 
@@ -327,6 +342,7 @@
                 updateDetails.innerHTML = renderUpdateRows([
                     ["目标平台", result.data.target],
                     ["更新包", result.data.asset_name],
+                    ["SHA256", result.data.sha256],
                     ["下载地址", result.data.downloaded_from],
                     ["安装路径", result.data.installed_path],
                 ]);
@@ -347,13 +363,18 @@
 
     function renderUpdateInfo(info) {
         var hasAsset = !!info.asset_name;
-        if (info.update_available && hasAsset) {
+        var hasChecksum = !!info.checksum_asset_name;
+        if (info.update_available && hasAsset && hasChecksum) {
             updateTitle.textContent = "发现新版本";
             updateSummary.textContent = "当前 v" + info.current_version + "，可更新到 v" + info.latest_version + "。";
             updateApplyBtn.disabled = false;
         } else if (info.update_available && !hasAsset) {
             updateTitle.textContent = "发现新版本但无匹配包";
             updateSummary.textContent = "最新版本 v" + info.latest_version + " 没有匹配 " + info.target + " 的更新包。";
+            updateApplyBtn.disabled = true;
+        } else if (info.update_available && !hasChecksum) {
+            updateTitle.textContent = "发现新版本但缺少校验文件";
+            updateSummary.textContent = "最新版本 v" + info.latest_version + " 未提供 SHA256 校验文件。";
             updateApplyBtn.disabled = true;
         } else {
             updateTitle.textContent = "已是最新版本";
@@ -366,6 +387,7 @@
             ["最新版本", "v" + info.latest_version],
             ["目标平台", info.target],
             ["更新包", info.asset_name || "-"],
+            ["校验文件", info.checksum_asset_name || "-"],
             ["Release", info.release_url],
             ["镜像顺序", info.mirror_urls && info.mirror_urls.length ? info.mirror_urls.join("\n") : "-"],
         ]);
