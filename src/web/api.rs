@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{
     Json,
     extract::State,
@@ -8,7 +6,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::device::wifi::WifiService;
+use crate::app::AppState;
 
 pub struct Utf8Json<T>(pub T);
 
@@ -82,8 +80,8 @@ pub struct ConnectRequest {
     pub password: Option<String>,
 }
 
-pub async fn scan_handler(State(service): State<Arc<WifiService>>) -> impl IntoResponse {
-    match service.scan().await {
+pub async fn scan_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.wifi.scan().await {
         Ok(networks) => {
             let data: Vec<NetworkInfo> = networks
                 .into_iter()
@@ -101,8 +99,8 @@ pub async fn scan_handler(State(service): State<Arc<WifiService>>) -> impl IntoR
     }
 }
 
-pub async fn status_handler(State(service): State<Arc<WifiService>>) -> impl IntoResponse {
-    match service.status().await {
+pub async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.wifi.status().await {
         Ok(status) => {
             let data = StatusInfo {
                 state: status.state,
@@ -117,20 +115,34 @@ pub async fn status_handler(State(service): State<Arc<WifiService>>) -> impl Int
 }
 
 pub async fn connect_handler(
-    State(service): State<Arc<WifiService>>,
+    State(state): State<AppState>,
     Json(req): Json<ConnectRequest>,
 ) -> impl IntoResponse {
     let password = req.password.as_deref().filter(|value| !value.is_empty());
 
-    match service.connect(&req.ssid, password).await {
+    match state.wifi.connect(&req.ssid, password).await {
         Ok(()) => ApiResponse::ok("连接成功").into_response(),
         Err(e) => ApiResponse::<&str>::err(e.to_string()).into_response(),
     }
 }
 
-pub async fn disconnect_handler(State(service): State<Arc<WifiService>>) -> impl IntoResponse {
-    match service.disconnect().await {
+pub async fn disconnect_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.wifi.disconnect().await {
         Ok(()) => ApiResponse::ok("已断开连接").into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn update_check_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.update.check().await {
+        Ok(info) => ApiResponse::ok(info).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn update_apply_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.update.apply().await {
+        Ok(result) => ApiResponse::ok(result).into_response(),
         Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
     }
 }

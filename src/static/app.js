@@ -15,6 +15,11 @@
     var connectBtn = document.getElementById("connect-btn");
     var cancelBtn = document.getElementById("cancel-btn");
     var toast = document.getElementById("toast");
+    var updateCheckBtn = document.getElementById("update-check-btn");
+    var updateApplyBtn = document.getElementById("update-apply-btn");
+    var updateTitle = document.getElementById("update-title");
+    var updateSummary = document.getElementById("update-summary");
+    var updateDetails = document.getElementById("update-details");
 
     function init() {
         scanBtn.addEventListener("click", doScan);
@@ -29,6 +34,8 @@
         passwordInput.addEventListener("keydown", function (e) {
             if (e.key === "Enter") doConnect();
         });
+        updateCheckBtn.addEventListener("click", checkUpdate);
+        updateApplyBtn.addEventListener("click", applyUpdate);
 
         initTabs();
         loadStatus();
@@ -279,6 +286,109 @@
 
         disconnectBtn.disabled = false;
         disconnectBtn.textContent = "断开连接";
+    }
+
+    async function checkUpdate() {
+        setUpdateCheckBusy(true);
+        updateApplyBtn.disabled = true;
+        updateTitle.textContent = "正在检查更新";
+        updateSummary.textContent = "正在通过镜像站请求 GitHub Release 信息。";
+        updateDetails.innerHTML = "";
+
+        try {
+            var result = await api("/api/update/check");
+            if (result.success) {
+                renderUpdateInfo(result.data);
+            } else {
+                updateTitle.textContent = "检查更新失败";
+                updateSummary.textContent = result.message || "无法获取最新版本信息";
+                showToast("检查更新失败", "error");
+            }
+        } catch (e) {
+            updateTitle.textContent = "检查更新失败";
+            updateSummary.textContent = "更新服务未响应";
+            showToast("更新服务未响应", "error");
+        }
+
+        setUpdateCheckBusy(false);
+    }
+
+    async function applyUpdate() {
+        updateApplyBtn.disabled = true;
+        updateApplyBtn.innerHTML = '<span class="spinner"></span><span>更新中</span>';
+        updateTitle.textContent = "正在更新";
+        updateSummary.textContent = "正在下载并替换当前程序，请不要断电。";
+
+        try {
+            var result = await api("/api/update/apply", { method: "POST" });
+            if (result.success) {
+                updateTitle.textContent = "更新完成";
+                updateSummary.textContent = "已从 v" + result.data.previous_version + " 更新到 v" + result.data.updated_version + "，请重启服务后生效。";
+                updateDetails.innerHTML = renderUpdateRows([
+                    ["目标平台", result.data.target],
+                    ["更新包", result.data.asset_name],
+                    ["下载地址", result.data.downloaded_from],
+                    ["安装路径", result.data.installed_path],
+                ]);
+                showToast("更新完成，请重启服务", "success");
+            } else {
+                updateTitle.textContent = "更新失败";
+                updateSummary.textContent = result.message || "下载或安装更新失败";
+                showToast("更新失败", "error");
+            }
+        } catch (e) {
+            updateTitle.textContent = "更新失败";
+            updateSummary.textContent = "更新请求失败";
+            showToast("更新请求失败", "error");
+        }
+
+        updateApplyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M8 10l3-3M8 10L5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12.5h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>立即更新</span>';
+    }
+
+    function renderUpdateInfo(info) {
+        var hasAsset = !!info.asset_name;
+        if (info.update_available && hasAsset) {
+            updateTitle.textContent = "发现新版本";
+            updateSummary.textContent = "当前 v" + info.current_version + "，可更新到 v" + info.latest_version + "。";
+            updateApplyBtn.disabled = false;
+        } else if (info.update_available && !hasAsset) {
+            updateTitle.textContent = "发现新版本但无匹配包";
+            updateSummary.textContent = "最新版本 v" + info.latest_version + " 没有匹配 " + info.target + " 的更新包。";
+            updateApplyBtn.disabled = true;
+        } else {
+            updateTitle.textContent = "已是最新版本";
+            updateSummary.textContent = "当前版本 v" + info.current_version + " 与最新 release 一致。";
+            updateApplyBtn.disabled = true;
+        }
+
+        updateDetails.innerHTML = renderUpdateRows([
+            ["当前版本", "v" + info.current_version],
+            ["最新版本", "v" + info.latest_version],
+            ["目标平台", info.target],
+            ["更新包", info.asset_name || "-"],
+            ["Release", info.release_url],
+            ["镜像顺序", info.mirror_urls && info.mirror_urls.length ? info.mirror_urls.join("\n") : "-"],
+        ]);
+    }
+
+    function renderUpdateRows(rows) {
+        var html = "";
+        for (var i = 0; i < rows.length; i++) {
+            html += '<div class="update-row">';
+            html += '<span class="update-row-label">' + escapeHtml(rows[i][0]) + "</span>";
+            html += '<span class="update-row-value">' + escapeHtml(rows[i][1]) + "</span>";
+            html += "</div>";
+        }
+        return html;
+    }
+
+    function setUpdateCheckBusy(busy) {
+        updateCheckBtn.disabled = busy;
+        if (busy) {
+            updateCheckBtn.innerHTML = '<span class="spinner"></span><span>检查中</span>';
+        } else {
+            updateCheckBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 8a5.5 5.5 0 11-1.61-3.89" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13.5 3.5v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>检查更新</span>';
+        }
     }
 
     function startStatusPoll() {

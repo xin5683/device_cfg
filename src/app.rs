@@ -7,15 +7,27 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
-    device::wifi::{WifiConfig, WifiService},
+    device::{
+        update::{UpdateConfig, UpdateService},
+        wifi::{WifiConfig, WifiService},
+    },
     web::{api, assets},
 };
 
+#[derive(Clone)]
+pub struct AppState {
+    pub wifi: Arc<WifiService>,
+    pub update: Arc<UpdateService>,
+}
+
 pub async fn run() {
     let config = AppConfig::from_env();
-    let service = Arc::new(WifiService::new(WifiConfig::from_env()));
+    let wifi = Arc::new(WifiService::new(WifiConfig::from_env()));
+    let update = Arc::new(UpdateService::new(UpdateConfig::from_env()));
+    let state = AppState { wifi, update };
 
-    service.print_config();
+    state.wifi.print_config();
+    state.update.print_config();
 
     let app = Router::new()
         .route("/", get(assets::index))
@@ -25,7 +37,9 @@ pub async fn run() {
         .route("/api/status", get(api::status_handler))
         .route("/api/connect", post(api::connect_handler))
         .route("/api/disconnect", post(api::disconnect_handler))
-        .with_state(service)
+        .route("/api/update/check", get(api::update_check_handler))
+        .route("/api/update/apply", post(api::update_apply_handler))
+        .with_state(state)
         .layer(build_cors());
 
     let addr = format!("0.0.0.0:{}", config.port);

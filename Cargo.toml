@@ -15,4 +15,9 @@ axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "json", "rustls"] }
+self_update = { version = "0.44", default-features = false, features = ["reqwest", "rustls", "archive-tar", "compression-flate2"] }
+semver = "1"
+tempfile = "3"
 tower-http = { version = "0.6", features = ["cors"] }
+webpki-root-certs = "1"

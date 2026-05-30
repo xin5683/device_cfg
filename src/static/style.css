@@ -433,6 +433,84 @@ body {
     color: var(--color-text-secondary);
 }
 
+/* ==================== 系统更新 ==================== */
+.update-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+}
+
+.update-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.update-status-card {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-xl);
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px solid var(--color-border);
+}
+
+.update-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--color-accent);
+    background: rgba(0, 122, 255, 0.1);
+}
+
+.update-status-card h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: 4px;
+}
+
+.update-status-card p {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.update-details {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-sm);
+}
+
+.update-row {
+    display: grid;
+    grid-template-columns: minmax(96px, 140px) 1fr;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-lg);
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid var(--color-border);
+}
+
+.update-row-label {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.update-row-value {
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
 /* ==================== 网络列表 ==================== */
 .network-list {
     display: flex;
@@ -817,6 +895,16 @@ body {
     .card-header {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .update-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .update-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
     }
 
     .content-card {

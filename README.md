@@ -16,6 +16,7 @@
 - WiFi 扫描
 - WiFi 连接与断开
 - 当前网络状态查询
+- 从 GitHub Release 自更新
 - 跨域调用支持
 - `armv7` 与 `aarch64` 交叉编译
 
@@ -57,6 +58,22 @@ ssh root@<board-ip> "sudo env WPA_CTRL_DIR=/run/wpa_supplicant WIFI_IFACE=wlan1 
 - `PORT`：服务端口，默认 `80`
 - `WPA_CTRL_DIR`：`wpa_supplicant` 控制目录，默认 `/var/run/wpa_supplicant`
 - `WIFI_IFACE`：无线网卡接口名，默认 `wlan0`
+- `UPDATE_REPO_OWNER`：更新仓库 owner，默认 `xin5683`
+- `UPDATE_REPO_NAME`：更新仓库名，默认 `device_cfg`
+- `UPDATE_TARGET`：更新包目标平台，默认当前编译 target
+- `UPDATE_MIRRORS`：GitHub 镜像站列表，多个地址用英文逗号分隔
+
+默认镜像顺序：
+
+```text
+https://gh-proxy.org
+https://gh.monlor.com
+https://ghproxy.monkeyray.net
+https://ghfast.top
+https://cors.isteed.cc
+https://cdn.crashmc.com
+https://gh.jasonzeng.dev
+```
 
 ## API
 
@@ -85,6 +102,21 @@ ssh root@<board-ip> "sudo env WPA_CTRL_DIR=/run/wpa_supplicant WIFI_IFACE=wlan1 
 
 断开当前 WiFi。
 
+### `GET /api/update/check`
+
+检查 GitHub Release 是否存在新版本。接口会返回当前版本、最新版本、目标平台、匹配到的 release asset 和按顺序尝试的镜像 URL。
+
+### `POST /api/update/apply`
+
+下载并替换当前运行的 `device_cfg` 二进制。更新包需要是 release asset，命名和当前 workflow 保持一致：
+
+```text
+device_cfg-aarch64-unknown-linux-musl.tar.gz
+device_cfg-armv7-unknown-linux-musleabihf.tar.gz
+```
+
+压缩包内的二进制文件名需要是 `device_cfg-<target>`。更新完成后需要重启服务让新版本生效。
+
 ## 架构
 
 当前代码按“设备能力 / Web 接口 / 启动装配”分层：
@@ -99,6 +131,7 @@ device_cfg/
 │   ├── app.rs                # 应用启动、配置、路由装配
 │   ├── device/
 │   │   ├── mod.rs
+│   │   ├── update.rs         # GitHub Release 自更新服务
 │   │   └── wifi.rs           # 设备 WiFi 控制服务
 │   ├── web/
 │   │   ├── mod.rs
