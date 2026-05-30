@@ -22,17 +22,44 @@
 
 ## 快速开始
 
+### 构建前端
+
+前端已迁移到 `frontend/`，使用 Vite + Svelte + TypeScript，并通过 Flowbite Svelte、Tailwind CSS、Lucide 图标和 `ansi_up` 处理通用 UI 与日志渲染。Node/npm 只在开发机或 CI 构建时使用，目标设备运行时仍然只需要 `device_cfg` 单个二进制。
+
+```bash
+npm --prefix frontend ci
+npm --prefix frontend run build
+```
+
+Rust 构建会嵌入 `frontend/dist`。如果该目录不存在，`cargo build` 会提示先构建前端。
+
 ### 本地运行
 
 ```bash
+npm --prefix frontend run build
 PORT=3000 cargo run
 ```
 
 访问 `http://localhost:3000`。
 
+如需前端热更新开发，可先运行后端：
+
+```bash
+PORT=3000 cargo run
+```
+
+再运行前端开发服务器：
+
+```bash
+npm --prefix frontend run dev
+```
+
+Vite 会把 `/api` 代理到 `http://127.0.0.1:3000`。
+
 ### 交叉编译
 
 ```bash
+npm --prefix frontend run build
 cargo build --release --target aarch64-unknown-linux-gnu
 ls -lh target/aarch64-unknown-linux-gnu/release/device_cfg
 ```
@@ -147,18 +174,20 @@ device_cfg/
 │   ├── web/
 │   │   ├── mod.rs
 │   │   ├── api.rs            # HTTP API
-│   │   └── assets.rs         # 静态资源输出
-│   └── static/
-│       ├── index.html
-│       ├── style.css
-│       └── app.js
+│   │   └── assets.rs         # 嵌入并输出 frontend/dist
+└── frontend/
+    ├── src/
+    │   ├── api/              # TypeScript API 类型与客户端
+    │   ├── components/       # 通用业务组件
+    │   └── tabs/             # WiFi、更新、UDP 网关页签
+    └── dist/                 # Vite 构建产物，由 Rust 嵌入
 ```
 
 这套结构适合继续扩展：
 
 - `device/`：增加设备信息、LED、GPIO、系统状态等能力
 - `web/api.rs`：增加对应控制接口
-- `static/`：扩展前端页签和控制页面
+- `frontend/src/tabs/`：扩展前端页签和控制页面
 
 ## 运行依赖
 

@@ -1,0 +1,14 @@
+{
+  "extends": "@tsconfig/svelte/tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "checkJs": false,
+    "moduleResolution": "bundler",
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "types": ["svelte"]
+  },
+  "include": ["src/**/*.d.ts", "src/**/*.ts", "src/**/*.svelte", "vite.config.ts"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}

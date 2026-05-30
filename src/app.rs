@@ -39,9 +39,7 @@ pub async fn run() {
 
     let app = Router::new()
         .route("/", get(assets::index))
-        .route("/style.css", get(assets::style_css))
-        .route("/vendor/ansi_up.js", get(assets::ansi_up_js))
-        .route("/app.js", get(assets::app_js))
+        .route("/assets/{*path}", get(assets::asset))
         .route("/api/system/info", get(api::system_info_handler))
         .route("/api/scan", get(api::scan_handler))
         .route("/api/status", get(api::status_handler))
