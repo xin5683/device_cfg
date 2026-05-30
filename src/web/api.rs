@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::State,
+    extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -85,6 +85,11 @@ pub struct ConnectRequest {
     pub password: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct LogQuery {
+    pub lines: Option<usize>,
+}
+
 pub async fn system_info_handler() -> impl IntoResponse {
     ApiResponse::ok(SystemInfo {
         version: env!("CARGO_PKG_VERSION"),
@@ -155,6 +160,58 @@ pub async fn update_check_handler(State(state): State<AppState>) -> impl IntoRes
 pub async fn update_apply_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.update.apply().await {
         Ok(result) => ApiResponse::ok(result).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn daemon_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.daemon.status().await {
+        Ok(status) => ApiResponse::ok(status).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn daemon_check_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.daemon.check().await {
+        Ok(info) => ApiResponse::ok(info).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn daemon_pull_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.daemon.pull().await {
+        Ok(result) => ApiResponse::ok(result).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn daemon_upgrade_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.daemon.upgrade().await {
+        Ok(result) => ApiResponse::ok(result).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn daemon_start_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.daemon.start().await {
+        Ok(result) => ApiResponse::ok(result).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn daemon_restart_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.daemon.restart().await {
+        Ok(result) => ApiResponse::ok(result).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn daemon_logs_handler(
+    State(state): State<AppState>,
+    Query(query): Query<LogQuery>,
+) -> impl IntoResponse {
+    match state.daemon.logs(query.lines.unwrap_or(120)).await {
+        Ok(logs) => ApiResponse::ok(logs).into_response(),
         Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
     }
 }

@@ -44,12 +44,28 @@
                         <span class="status-card-badge">wlan1</span>
                     </div>
                     <div class="status-info">
-                        <div id="hero-status-content">
+                        <div id="hero-status-content" class="status-content">
                             <p class="status-loading">正在加载...</p>
                         </div>
                     </div>
                     <div class="hero-status-footer">
                         <button id="disconnect-btn" class="btn btn-danger" style="display:none;">断开连接</button>
+                    </div>
+                </article>
+                <article class="hero-status glass-surface">
+                    <div class="hero-status-header">
+                        <div class="hero-status-heading">
+                            <p class="status-label">UDP 网关</p>
+                        </div>
+                        <span class="status-card-badge">XPlaneUDP</span>
+                    </div>
+                    <div class="status-info">
+                        <div id="daemon-status-content" class="status-content">
+                            <p class="status-loading">正在加载...</p>
+                        </div>
+                    </div>
+                    <div class="hero-status-footer">
+                        <button id="daemon-start-hero-btn" class="btn btn-primary" style="display:none;">启动</button>
                     </div>
                 </article>
             </section>
@@ -68,6 +84,13 @@
                         <path d="M4 13v2a2 2 0 002 2h8a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
                     </svg>
                     <span>系统更新</span>
+                </button>
+                <button class="tab-item" data-tab="daemon">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M7 8h6M7 12h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    <span>UDP 网关</span>
                 </button>
                 <button class="tab-item" data-tab="diagnostic" disabled>
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -160,6 +183,76 @@
                     </section>
                 </div>
 
+                <!-- UDP 网关标签页 -->
+                <div class="tab-panel" data-panel="daemon">
+                    <section class="content-card glass-surface">
+                        <div class="card-header">
+                            <div class="header-text">
+                                <h2>UDP 网关</h2>
+                                <p class="card-subtitle">管理 XPlaneUDP 守护进程</p>
+                            </div>
+                            <div class="update-actions">
+                                <button id="daemon-check-btn" class="btn btn-secondary">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        <path d="M13.5 8a5.5 5.5 0 11-1.61-3.89" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                        <path d="M13.5 3.5v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>检查</span>
+                                </button>
+                                <button id="daemon-pull-btn" class="btn btn-secondary">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        <path d="M8 2v8M8 10l3-3M8 10L5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    </svg>
+                                    <span>拉取</span>
+                                </button>
+                                <button id="daemon-upgrade-btn" class="btn btn-primary" disabled>
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>升级</span>
+                                </button>
+                                <button id="daemon-start-btn" class="btn btn-primary">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        <path d="M5 3.5v9l7-4.5-7-4.5z" fill="currentColor"/>
+                                    </svg>
+                                    <span>启动</span>
+                                </button>
+                                <button id="daemon-restart-btn" class="btn btn-secondary" disabled>
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        <path d="M13 7a5 5 0 10-1.46 3.54" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                        <path d="M13 3.5V7h-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>重启</span>
+                                </button>
+                                <button id="daemon-logs-btn" class="btn btn-secondary">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        <rect x="3" y="2.5" width="10" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                                        <path d="M5.5 6h5M5.5 8.5h4M5.5 11h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    </svg>
+                                    <span>日志</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="update-panel">
+                            <div class="update-status-card">
+                                <div class="update-icon">
+                                    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                                        <rect x="8" y="10" width="20" height="16" rx="3" stroke="currentColor" stroke-width="2"/>
+                                        <path d="M14 16h8M14 21h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 id="daemon-title">正在读取状态</h3>
+                                    <p id="daemon-summary">正在获取守护进程状态。</p>
+                                </div>
+                            </div>
+                            <div id="daemon-details" class="update-details"></div>
+                            <pre id="daemon-log-view" class="log-view">暂无日志</pre>
+                        </div>
+                    </section>
+                </div>
+
                 <!-- 设备概览标签页 -->
                 <div class="tab-panel" data-panel="overview">
                     <section class="content-card glass-surface">
@@ -235,6 +328,7 @@
     <!-- Toast 提示 -->
     <div id="toast" class="toast" style="display:none;"></div>
 
+    <script src="/vendor/ansi_up.js"></script>
     <script src="/app.js"></script>
 </body>
 </html>

@@ -62,6 +62,17 @@ ssh root@<board-ip> "sudo env WPA_CTRL_DIR=/run/wpa_supplicant WIFI_IFACE=wlan1 
 - `UPDATE_REPO_NAME`：更新仓库名，默认 `device_cfg`
 - `UPDATE_TARGET`：更新包目标平台，默认当前编译 target
 - `UPDATE_MIRRORS`：GitHub 镜像站列表，多个地址用英文逗号分隔
+- `DAEMON_INSTALL_DIR`：UDP 网关安装目录，默认 `/opt/device_cfg/udp_gw`
+- `DAEMON_TARGET`：UDP 网关 release 目标平台，默认当前编译 target
+- `DAEMON_ARGS`：启动 UDP 网关时附加的命令行参数，按空格分隔
+- `DAEMON_MIRRORS`：UDP 网关下载使用的 GitHub 镜像站列表，默认同 `UPDATE_MIRRORS`
+- `DAEMON_LOG_MAX_LINES`：UDP 网关日志文件最大保留行数，默认 `2000`
+
+UDP 网关安装后会在安装目录保存版本信息，默认路径为：
+
+```text
+/opt/device_cfg/udp_gw/udp_gw_builder.version.json
+```
 
 默认镜像顺序：
 

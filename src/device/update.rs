@@ -64,12 +64,7 @@ impl UpdateConfig {
                         .collect()
                 })
                 .filter(|mirrors: &Vec<String>| !mirrors.is_empty())
-                .unwrap_or_else(|| {
-                    DEFAULT_MIRRORS
-                        .iter()
-                        .map(|value| value.to_string())
-                        .collect()
-                }),
+                .unwrap_or_else(|| default_mirrors()),
         }
     }
 
@@ -227,7 +222,14 @@ fn fetch_latest_release(config: &UpdateConfig) -> Result<Release> {
     )))
 }
 
-fn download_json(url: &str) -> Result<serde_json::Value> {
+pub(crate) fn default_mirrors() -> Vec<String> {
+    DEFAULT_MIRRORS
+        .iter()
+        .map(|value| value.to_string())
+        .collect()
+}
+
+pub(crate) fn download_json(url: &str) -> Result<serde_json::Value> {
     let tmp_dir = tempfile::Builder::new()
         .prefix("device_cfg_release")
         .tempdir()?;
@@ -238,7 +240,7 @@ fn download_json(url: &str) -> Result<serde_json::Value> {
     serde_json::from_str(&json).map_err(UpdateError::from)
 }
 
-fn download_with_mirrors(urls: &[String], dest: &Path) -> Result<String> {
+pub(crate) fn download_with_mirrors(urls: &[String], dest: &Path) -> Result<String> {
     let mut last_error = None;
     for url in urls {
         let file = File::create(dest)?;
@@ -475,7 +477,7 @@ fn is_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-fn sha256_file(path: &Path) -> Result<String> {
+pub(crate) fn sha256_file(path: &Path) -> Result<String> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 8192];
@@ -489,7 +491,7 @@ fn sha256_file(path: &Path) -> Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-fn target_candidates(target: &str) -> Vec<String> {
+pub(crate) fn target_candidates(target: &str) -> Vec<String> {
     let mut targets = vec![target.to_string()];
     match target {
         "aarch64-unknown-linux-gnu" => {
@@ -503,7 +505,7 @@ fn target_candidates(target: &str) -> Vec<String> {
     targets
 }
 
-fn is_newer_version(current: &str, latest: &str) -> bool {
+pub(crate) fn is_newer_version(current: &str, latest: &str) -> bool {
     match (Version::parse(current), Version::parse(latest)) {
         (Ok(current), Ok(latest)) => latest > current,
         _ => latest != current,
@@ -511,8 +513,11 @@ fn is_newer_version(current: &str, latest: &str) -> bool {
 }
 
 fn mirror_urls(config: &UpdateConfig, url: &str) -> Vec<String> {
-    let mut urls: Vec<String> = config
-        .mirrors
+    build_mirror_urls(&config.mirrors, url)
+}
+
+pub(crate) fn build_mirror_urls(mirrors: &[String], url: &str) -> Vec<String> {
+    let mut urls: Vec<String> = mirrors
         .iter()
         .map(|mirror| format!("{}/{}", mirror.trim_end_matches('/'), url))
         .collect();

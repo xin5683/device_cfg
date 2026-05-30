@@ -8,6 +8,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
     device::{
+        daemon::{DaemonConfig, DaemonService},
         update::{UpdateConfig, UpdateService},
         wifi::{WifiConfig, WifiService},
     },
@@ -18,20 +19,28 @@ use crate::{
 pub struct AppState {
     pub wifi: Arc<WifiService>,
     pub update: Arc<UpdateService>,
+    pub daemon: Arc<DaemonService>,
 }
 
 pub async fn run() {
     let config = AppConfig::from_env();
     let wifi = Arc::new(WifiService::new(WifiConfig::from_env()));
     let update = Arc::new(UpdateService::new(UpdateConfig::from_env()));
-    let state = AppState { wifi, update };
+    let daemon = Arc::new(DaemonService::new(DaemonConfig::from_env()));
+    let state = AppState {
+        wifi,
+        update,
+        daemon,
+    };
 
     state.wifi.print_config();
     state.update.print_config();
+    state.daemon.print_config();
 
     let app = Router::new()
         .route("/", get(assets::index))
         .route("/style.css", get(assets::style_css))
+        .route("/vendor/ansi_up.js", get(assets::ansi_up_js))
         .route("/app.js", get(assets::app_js))
         .route("/api/system/info", get(api::system_info_handler))
         .route("/api/scan", get(api::scan_handler))
@@ -40,6 +49,13 @@ pub async fn run() {
         .route("/api/disconnect", post(api::disconnect_handler))
         .route("/api/update/check", get(api::update_check_handler))
         .route("/api/update/apply", post(api::update_apply_handler))
+        .route("/api/daemon/status", get(api::daemon_status_handler))
+        .route("/api/daemon/check", get(api::daemon_check_handler))
+        .route("/api/daemon/pull", post(api::daemon_pull_handler))
+        .route("/api/daemon/upgrade", post(api::daemon_upgrade_handler))
+        .route("/api/daemon/start", post(api::daemon_start_handler))
+        .route("/api/daemon/restart", post(api::daemon_restart_handler))
+        .route("/api/daemon/logs", get(api::daemon_logs_handler))
         .with_state(state)
         .layer(build_cors());
 
