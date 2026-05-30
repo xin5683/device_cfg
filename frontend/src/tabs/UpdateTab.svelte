@@ -117,18 +117,18 @@
   }
 </script>
 
-<Card class="max-w-none border border-gray-200 bg-white shadow-sm" size="xl">
+<Card class="glass-card max-w-none" size="xl">
   <div class="flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between">
     <div>
-      <h2 class="text-xl font-semibold text-gray-950">系统更新</h2>
-      <p class="mt-1 text-sm text-gray-500">从 GitHub Release 获取设备固件包</p>
+      <h2 class="text-xl font-semibold tracking-normal text-slate-950 dark:text-white">系统更新</h2>
+      <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">从 GitHub Release 获取设备固件包</p>
     </div>
     <div class="flex flex-wrap gap-3">
-      <Button color="alternative" loading={checking} disabled={checking || applying} onclick={checkUpdate}>
+      <Button class="glass-button" color="alternative" loading={checking} disabled={checking || applying} onclick={checkUpdate}>
         <RefreshCw size={16} class="mr-2" />
         检查更新
       </Button>
-      <Button color="primary" loading={applying} disabled={!canApply} onclick={applyUpdate}>
+      <Button class="glass-button glass-button--primary" color="alternative" loading={applying} disabled={!canApply} onclick={applyUpdate}>
         <Download size={16} class="mr-2" />
         立即更新
       </Button>
@@ -136,9 +136,9 @@
   </div>
 
   <div class="px-5 pb-5">
-    <div class="mb-4 rounded-lg border border-gray-100 bg-gray-50 p-4">
-      <h3 class="text-lg font-semibold text-gray-950">{title}</h3>
-      <p class="mt-1 text-sm text-gray-600">{summary}</p>
+    <div class="glass-lens mb-4 p-4">
+      <h3 class="relative text-lg font-semibold tracking-normal text-slate-950 dark:text-white">{title}</h3>
+      <p class="relative mt-1 text-sm text-slate-700 dark:text-slate-200">{summary}</p>
     </div>
     {#if details.length > 0}
       <DetailRows rows={details} />

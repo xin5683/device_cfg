@@ -21,6 +21,8 @@
   let disconnecting = false;
   let startingDaemon = false;
   let statusPollTimer: number | undefined;
+  let pointerFrame: number | undefined;
+  let pendingPointer: { root: HTMLElement; x: number; y: number } | null = null;
   let toastId = 0;
   let toasts: ToastMessage[] = [];
 
@@ -53,6 +55,9 @@
   onDestroy(() => {
     if (statusPollTimer) {
       window.clearInterval(statusPollTimer);
+    }
+    if (pointerFrame) {
+      window.cancelAnimationFrame(pointerFrame);
     }
   });
 
@@ -189,22 +194,71 @@
       await loadDaemonStatus();
     }
   }
+
+  function handlePointerMove(event: PointerEvent) {
+    const target = event.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    pendingPointer = { root: target, x: event.clientX, y: event.clientY };
+    target.style.setProperty("--pointer-x", `${event.clientX - rect.left}px`);
+    target.style.setProperty("--pointer-y", `${event.clientY - rect.top}px`);
+    target.style.setProperty("--pointer-active", "1");
+
+    if (!pointerFrame) {
+      pointerFrame = window.requestAnimationFrame(syncLiquidReflections);
+    }
+  }
+
+  function handlePointerLeave(event: PointerEvent) {
+    const target = event.currentTarget as HTMLElement;
+    target.style.setProperty("--pointer-active", "0.42");
+    target
+      .querySelectorAll<HTMLElement>(
+        ".glass-panel, .glass-card, .glass-lens, .glass-list-item, .glass-detail-table, .glass-empty, .glass-badge, .glass-pill, .glass-status-badge"
+      )
+      .forEach((element) => element.style.setProperty("--pointer-active", "0.42"));
+  }
+
+  function syncLiquidReflections() {
+    pointerFrame = undefined;
+    if (!pendingPointer) return;
+
+    const { root, x, y } = pendingPointer;
+    root
+      .querySelectorAll<HTMLElement>(
+        ".glass-panel, .glass-card, .glass-lens, .glass-list-item, .glass-detail-table, .glass-empty, .glass-badge, .glass-pill, .glass-status-badge"
+      )
+      .forEach((element) => {
+        const rect = element.getBoundingClientRect();
+        element.style.setProperty("--pointer-x", `${x - rect.left}px`);
+        element.style.setProperty("--pointer-y", `${y - rect.top}px`);
+        element.style.setProperty("--pointer-active", "1");
+      });
+  }
 </script>
 
-<main class="min-h-screen bg-gray-100">
-  <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-4 sm:px-6 lg:px-8">
-    <header class="rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
+<main
+  class="liquid-app min-h-screen overflow-hidden"
+  style="--pointer-x: 62vw; --pointer-y: 14vh; --pointer-active: 0.56;"
+  onpointermove={handlePointerMove}
+  onpointerleave={handlePointerLeave}
+>
+  <div class="liquid-background" aria-hidden="true">
+    <span class="liquid-refraction"></span>
+  </div>
+
+  <div class="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-4 sm:gap-6 sm:px-6 sm:py-6 lg:px-8">
+    <header class="glass-panel sticky top-3 z-30 px-4 py-4 sm:px-5">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex items-center gap-3">
-          <span class="grid h-10 w-10 place-items-center rounded-lg bg-blue-700 text-white">
+          <span class="liquid-symbol grid h-10 w-10 place-items-center rounded-[16px] text-white">
             <Activity size={22} />
           </span>
           <div>
-            <h1 class="text-xl font-semibold text-gray-950">设备配置中心</h1>
-            <p class="text-sm text-gray-500">嵌入式设备控制台</p>
+            <h1 class="text-xl font-semibold tracking-normal text-slate-950 dark:text-white">设备配置中心</h1>
+            <p class="text-sm text-slate-600 dark:text-slate-300">嵌入式设备控制台</p>
           </div>
         </div>
-        <Badge color="blue" class="w-fit">版本 {systemVersion}</Badge>
+        <Badge color="blue" class="glass-badge w-fit">版本 {systemVersion}</Badge>
       </div>
     </header>
 
@@ -243,7 +297,7 @@
       />
     </section>
 
-    <section class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+    <section class="glass-tabs-shell">
       <Tabs bind:selected={activeTab} tabStyle="pill" divider={false} contentClass="pt-4">
         <TabItem key="wifi">
           {#snippet titleSlot()}
@@ -295,7 +349,7 @@
   {#if toasts.length > 0}
     <div class="fixed right-4 top-4 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3">
       {#each toasts as message (message.id)}
-        <Toast color={toastColor(message.kind)}>{message.text}</Toast>
+        <Toast color={toastColor(message.kind)} class="glass-panel">{message.text}</Toast>
       {/each}
     </div>
   {/if}

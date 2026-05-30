@@ -87,13 +87,13 @@
   }
 </script>
 
-<Card class="max-w-none border border-gray-200 bg-white shadow-sm" size="xl">
+<Card class="glass-card max-w-none" size="xl">
   <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
     <div>
-      <h2 class="text-xl font-semibold text-gray-950">可用网络</h2>
-      <p class="mt-1 text-sm text-gray-500">扫描并连接附近的 WiFi 热点</p>
+      <h2 class="text-xl font-semibold tracking-normal text-slate-950 dark:text-white">可用网络</h2>
+      <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">扫描并连接附近的 WiFi 热点</p>
     </div>
-    <Button color="primary" loading={scanState === "loading"} disabled={scanState === "loading"} onclick={scan}>
+    <Button class="glass-button glass-button--primary" color="alternative" loading={scanState === "loading"} disabled={scanState === "loading"} onclick={scan}>
       <Search size={16} class="mr-2" />
       扫描网络
     </Button>
@@ -105,15 +105,15 @@
         {#each networks as network}
           <button
             type="button"
-            class="grid grid-cols-[auto_1fr_auto] items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+            class="glass-list-item grid grid-cols-[auto_1fr_auto] items-center gap-4 p-4 text-left focus:outline-none"
             onclick={() => openConnect(network)}
           >
             <SignalBars signal={network.signal} />
             <span class="min-w-0">
-              <span class="block truncate text-sm font-semibold text-gray-950">{network.ssid}</span>
-              <span class="mt-1 block text-xs text-gray-500">{network.signal} dBm · {network.frequency} MHz</span>
+              <span class="block truncate text-sm font-semibold text-slate-950 dark:text-white">{network.ssid}</span>
+              <span class="mt-1 block text-xs text-slate-600 dark:text-slate-300">{network.signal} dBm · {network.frequency} MHz</span>
             </span>
-            <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+            <span class="glass-pill inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium">
               {#if network.security === "开放"}
                 <LockOpen size={13} />
               {:else}
@@ -125,19 +125,19 @@
         {/each}
       </div>
     {:else}
-      <div class="flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
-        <WifiOff size={44} class="text-gray-300" />
-        <p class="mt-4 text-sm text-gray-600">{scanMessage}</p>
+      <div class="glass-empty flex min-h-56 flex-col items-center justify-center border-dashed p-8 text-center">
+        <WifiOff size={44} class="relative text-slate-400 dark:text-slate-500" />
+        <p class="relative mt-4 text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>
       </div>
     {/if}
   </div>
 </Card>
 
-<Modal bind:open={connectOpen} title={isSelectedOpen ? "连接到开放网络" : "连接到网络"} size="sm">
+<Modal class="glass-modal" bind:open={connectOpen} title={isSelectedOpen ? "连接到开放网络" : "连接到网络"} size="sm">
   <div class="space-y-5">
     <div>
-      <p class="text-sm text-gray-500">网络名称</p>
-      <p class="mt-1 break-words text-lg font-semibold text-gray-950">{selectedNetwork?.ssid ?? "-"}</p>
+      <p class="text-sm text-slate-600 dark:text-slate-300">网络名称</p>
+      <p class="mt-1 break-words text-lg font-semibold text-slate-950 dark:text-white">{selectedNetwork?.ssid ?? "-"}</p>
     </div>
 
     {#if !isSelectedOpen}
@@ -155,8 +155,8 @@
     {/if}
 
     <div class="flex justify-end gap-3">
-      <Button color="alternative" disabled={connecting} onclick={() => (connectOpen = false)}>取消</Button>
-      <Button color="primary" loading={connecting} disabled={connecting} onclick={connect}>连接</Button>
+      <Button class="glass-button" color="alternative" disabled={connecting} onclick={() => (connectOpen = false)}>取消</Button>
+      <Button class="glass-button glass-button--primary" color="alternative" loading={connecting} disabled={connecting} onclick={connect}>连接</Button>
     </div>
   </div>
 </Modal>

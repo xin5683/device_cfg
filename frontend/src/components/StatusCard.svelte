@@ -18,21 +18,28 @@
   let stateColor: "green" | "gray" | "yellow" = "yellow";
 
   $: stateColor = stateTone === "connected" ? "green" : stateTone === "disconnected" ? "gray" : "yellow";
+
+  function actionToneClass(color: typeof actionColor) {
+    if (color === "primary" || color === "blue") return "glass-button--primary";
+    if (color === "red") return "glass-button--danger";
+    if (color === "green") return "glass-button--success";
+    return "";
+  }
 </script>
 
-<Card class="h-full max-w-none border border-gray-200 bg-white shadow-sm" size="xl">
+<Card class="glass-card h-full max-w-none" size="xl">
   <div class="flex items-start justify-between gap-4 p-5">
     <div>
-      <p class="text-sm font-medium text-gray-500">{title}</p>
-      <h2 class="mt-1 text-xl font-semibold text-gray-950">{summaryTitle}</h2>
+      <p class="text-sm font-medium text-slate-600 dark:text-slate-300">{title}</p>
+      <h2 class="mt-1 text-xl font-semibold tracking-normal text-slate-950 dark:text-white">{summaryTitle}</h2>
     </div>
-    <Badge color="blue" class="shrink-0">{badge}</Badge>
+    <Badge color="blue" class="glass-badge shrink-0">{badge}</Badge>
   </div>
 
   <div class="px-5 pb-5">
-    <div class="mb-4 flex items-start justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 p-4">
-      <p class="text-sm text-gray-600">{summary}</p>
-      <Badge color={stateColor}>{stateText}</Badge>
+    <div class="glass-lens mb-4 flex items-start justify-between gap-3 p-4">
+      <p class="relative text-sm text-slate-700 dark:text-slate-200">{summary}</p>
+      <Badge color={stateColor} class="glass-status-badge shrink-0">{stateText}</Badge>
     </div>
 
     <DetailRows {rows} />
@@ -40,8 +47,9 @@
     {#if actionLabel && onAction}
       <div class="mt-4 flex justify-end">
         <Button
-          color={actionColor}
+          color="alternative"
           size="sm"
+          class={`glass-button ${actionToneClass(actionColor)}`}
           loading={actionLoading}
           disabled={actionDisabled || actionLoading}
           onclick={onAction}
