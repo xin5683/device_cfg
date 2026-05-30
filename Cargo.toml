@@ -2,6 +2,13 @@
 name = "device_cfg"
 version = "0.1.0"
 edition = "2024"
+description = "Embedded device control web console with WiFi configuration APIs"
+license = "MIT"
+repository = "https://github.com/xin5683/device_cfg"
+readme = "README.md"
+keywords = ["embedded", "wifi", "axum", "device-config"]
+categories = ["embedded", "web-programming::http-server"]
+publish = false
 
 [dependencies]
 axum = "0.8"
