@@ -35,6 +35,8 @@ jobs:
 
       - name: Cache build image
         uses: docker/build-push-action@v7
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
           context: .
           file: .github/docker/build.Dockerfile
@@ -81,6 +83,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v7
         with:
+          pattern: device_cfg-*
           path: release-artifacts
 
       - name: Create release archives list
