@@ -123,7 +123,7 @@
       <h2 class="text-xl font-semibold tracking-normal text-slate-950 dark:text-white">系统更新</h2>
       <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">从 GitHub Release 获取设备固件包</p>
     </div>
-    <div class="flex flex-wrap gap-3">
+    <div class="grid gap-3 sm:flex sm:flex-wrap">
       <Button class="glass-button" color="alternative" loading={checking} disabled={checking || applying} onclick={checkUpdate}>
         <RefreshCw size={16} class="mr-2" />
         检查更新

@@ -93,7 +93,7 @@
       <h2 class="text-xl font-semibold tracking-normal text-slate-950 dark:text-white">可用网络</h2>
       <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">扫描并连接附近的 WiFi 热点</p>
     </div>
-    <Button class="glass-button glass-button--primary" color="alternative" loading={scanState === "loading"} disabled={scanState === "loading"} onclick={scan}>
+    <Button class="glass-button glass-button--primary w-full sm:w-auto" color="alternative" loading={scanState === "loading"} disabled={scanState === "loading"} onclick={scan}>
       <Search size={16} class="mr-2" />
       扫描网络
     </Button>
@@ -105,7 +105,7 @@
         {#each networks as network}
           <button
             type="button"
-            class="glass-list-item grid grid-cols-[auto_1fr_auto] items-center gap-4 p-4 text-left focus:outline-none"
+            class="glass-list-item grid grid-cols-[auto_1fr] items-center gap-4 p-4 text-left focus:outline-none sm:grid-cols-[auto_1fr_auto]"
             onclick={() => openConnect(network)}
           >
             <SignalBars signal={network.signal} />
@@ -113,7 +113,7 @@
               <span class="block truncate text-sm font-semibold text-slate-950 dark:text-white">{network.ssid}</span>
               <span class="mt-1 block text-xs text-slate-600 dark:text-slate-300">{network.signal} dBm · {network.frequency} MHz</span>
             </span>
-            <span class="glass-pill inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium">
+            <span class="glass-pill col-span-2 inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium sm:col-span-1">
               {#if network.security === "开放"}
                 <LockOpen size={13} />
               {:else}
@@ -154,7 +154,7 @@
       </div>
     {/if}
 
-    <div class="flex justify-end gap-3">
+    <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
       <Button class="glass-button" color="alternative" disabled={connecting} onclick={() => (connectOpen = false)}>取消</Button>
       <Button class="glass-button glass-button--primary" color="alternative" loading={connecting} disabled={connecting} onclick={connect}>连接</Button>
     </div>

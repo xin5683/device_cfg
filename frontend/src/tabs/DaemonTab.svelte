@@ -277,7 +277,7 @@
       <h2 class="text-xl font-semibold tracking-normal text-slate-950 dark:text-white">UDP 网关</h2>
       <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">管理 XPlaneUDP 守护进程</p>
     </div>
-    <div class="flex flex-wrap items-center gap-3">
+    <div class="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
       <button
         type="button"
         class="glass-switch"

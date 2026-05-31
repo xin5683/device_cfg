@@ -37,9 +37,12 @@
   </div>
 
   <div class="px-5 pb-5">
-    <div class="glass-lens mb-4 flex items-start justify-between gap-3 p-4">
+    <div class={`glass-lens glass-lens--${stateTone} mb-4 flex items-start justify-between gap-3 p-4`}>
       <p class="relative text-sm text-slate-700 dark:text-slate-200">{summary}</p>
-      <Badge color={stateColor} class="glass-status-badge shrink-0">{stateText}</Badge>
+      <Badge color={stateColor} class="glass-status-badge shrink-0">
+        <span class={`status-dot status-dot--${stateTone}`}></span>
+        {stateText}
+      </Badge>
     </div>
 
     <DetailRows {rows} />
