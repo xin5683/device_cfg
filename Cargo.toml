@@ -1,6 +1,6 @@
 [package]
 name = "device_cfg"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 description = "Embedded device control web console with WiFi configuration APIs"
 license = "MIT"
