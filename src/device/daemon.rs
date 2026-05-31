@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::device::update::{
     Result, UpdateError, build_mirror_urls, default_mirrors, download_json, download_with_mirrors,
-    is_newer_version, sha256_file, target_candidates,
+    is_newer_version, sha256_file,
 };
 
 const DEFAULT_REPO_OWNER: &str = "xin5683";
@@ -507,17 +507,37 @@ fn install_latest(config: DaemonConfig, mode: InstallMode) -> Result<DaemonInsta
 }
 
 fn find_target_asset(config: &DaemonConfig, release: &DaemonRelease) -> Option<DaemonAsset> {
-    let target_candidates = target_candidates(&config.target);
-    release
-        .assets
+    daemon_target_candidates(&config.target)
         .iter()
-        .find(|asset| {
-            asset.name.contains(&config.asset_prefix)
-                && target_candidates
-                    .iter()
-                    .any(|target| asset.name.contains(target))
+        .find_map(|target| {
+            release
+                .assets
+                .iter()
+                .find(|asset| {
+                    asset.name.contains(&config.asset_prefix) && asset.name.contains(target)
+                })
+                .cloned()
         })
-        .cloned()
+}
+
+fn daemon_target_candidates(target: &str) -> Vec<String> {
+    let mut targets = vec![target.to_string()];
+    match target {
+        "aarch64-unknown-linux-gnu" => {
+            targets.push("aarch64-unknown-linux-musl".to_string());
+        }
+        "aarch64-unknown-linux-musl" => {
+            targets.push("aarch64-unknown-linux-gnu".to_string());
+        }
+        "armv7-unknown-linux-gnueabihf" => {
+            targets.push("armv7-unknown-linux-musleabihf".to_string());
+        }
+        "armv7-unknown-linux-musleabihf" => {
+            targets.push("armv7-unknown-linux-gnueabihf".to_string());
+        }
+        _ => {}
+    }
+    targets
 }
 
 fn find_extracted_binary(dir: &Path, bin_name: &str) -> Result<PathBuf> {
@@ -864,6 +884,89 @@ fn read_logs(config: &DaemonConfig, lines: usize) -> Result<DaemonLogInfo> {
         path: config.log_path.display().to_string(),
         lines: tail.into_iter().collect(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn release_with_assets(names: &[&str]) -> DaemonRelease {
+        DaemonRelease {
+            version: "0.2.4".to_string(),
+            body: None,
+            assets: names
+                .iter()
+                .map(|name| DaemonAsset {
+                    name: (*name).to_string(),
+                    download_url: format!("https://example.com/{name}"),
+                    sha256: Some("abc123".to_string()),
+                })
+                .collect(),
+        }
+    }
+
+    fn config_for_target(target: &str) -> DaemonConfig {
+        DaemonConfig {
+            repo_owner: DEFAULT_REPO_OWNER.to_string(),
+            repo_name: DEFAULT_REPO_NAME.to_string(),
+            asset_prefix: DEFAULT_ASSET_PREFIX.to_string(),
+            bin_name: DEFAULT_BIN_NAME.to_string(),
+            target: target.to_string(),
+            github_api_url: DEFAULT_GITHUB_API_URL.to_string(),
+            mirrors: Vec::new(),
+            install_dir: PathBuf::from("/tmp/device_cfg_test"),
+            log_path: PathBuf::from("/tmp/device_cfg_test/test.log"),
+            state_path: PathBuf::from("/tmp/device_cfg_test/test.state.json"),
+            log_max_lines: DEFAULT_LOG_MAX_LINES,
+            args: Vec::new(),
+            default_auto_start: false,
+        }
+    }
+
+    #[test]
+    fn matches_gnu_armv7_asset_for_musl_runtime_target() {
+        let config = config_for_target("armv7-unknown-linux-musleabihf");
+        let release = release_with_assets(&[
+            "XPlaneUDP-v0.2.4-aarch64-unknown-linux-gnu.tar.gz",
+            "XPlaneUDP-v0.2.4-armv7-unknown-linux-gnueabihf.tar.gz",
+        ]);
+
+        let asset = find_target_asset(&config, &release).expect("matching asset");
+
+        assert_eq!(
+            asset.name,
+            "XPlaneUDP-v0.2.4-armv7-unknown-linux-gnueabihf.tar.gz"
+        );
+    }
+
+    #[test]
+    fn prefers_exact_target_match_before_compatible_target() {
+        let config = config_for_target("armv7-unknown-linux-musleabihf");
+        let release = release_with_assets(&[
+            "XPlaneUDP-v0.2.4-armv7-unknown-linux-gnueabihf.tar.gz",
+            "XPlaneUDP-v0.2.4-armv7-unknown-linux-musleabihf.tar.gz",
+        ]);
+
+        let asset = find_target_asset(&config, &release).expect("matching asset");
+
+        assert_eq!(
+            asset.name,
+            "XPlaneUDP-v0.2.4-armv7-unknown-linux-musleabihf.tar.gz"
+        );
+    }
+
+    #[test]
+    fn matches_gnu_aarch64_asset_for_musl_runtime_target() {
+        let config = config_for_target("aarch64-unknown-linux-musl");
+        let release = release_with_assets(&["XPlaneUDP-v0.2.4-aarch64-unknown-linux-gnu.tar.gz"]);
+
+        let asset = find_target_asset(&config, &release).expect("matching asset");
+
+        assert_eq!(
+            asset.name,
+            "XPlaneUDP-v0.2.4-aarch64-unknown-linux-gnu.tar.gz"
+        );
+    }
 }
 
 fn trim_log_file(path: &Path, max_lines: usize) -> Result<()> {
