@@ -22,26 +22,28 @@
   let title = "正在读取状态";
   let summary = "正在获取守护进程状态。";
   let details: DetailRow[] = [];
+  let logsText = "";
   let logsHtml = "暂无日志";
-  let busyAction: "check" | "pull" | "upgrade" | "start" | "restart" | "logs" | "auto-start" | null = null;
+  let busyAction: "check" | "pull" | "upgrade" | "start" | "restart" | "auto-start" | null = null;
   let status: DaemonStatus | null = null;
   let canUpgrade = false;
-  let logTimer: number | undefined;
+  let logSocket: WebSocket | undefined;
+  let reconnectTimer: number | undefined;
   let autoStart = false;
   let logViewport: HTMLPreElement | undefined;
   let followLatestLogs = true;
 
   $: if (active) {
-    startLogPoll();
+    startLogStream();
   } else {
-    stopLogPoll();
+    stopLogStream();
   }
 
   onMount(() => {
     void loadStatus();
   });
 
-  onDestroy(stopLogPoll);
+  onDestroy(stopLogStream);
 
   function notify(text: string, kind: ToastKind) {
     dispatch("toast", { text, kind });
@@ -190,7 +192,6 @@
         resetLogView();
         notify("UDP 网关已启动", "success");
         await loadStatus();
-        await loadLogs(true, true);
       } else {
         notify(`UDP 网关启动失败: ${result.message ?? "未知错误"}`, "error");
       }
@@ -210,7 +211,6 @@
         resetLogView();
         notify("UDP 网关已重启", "success");
         await loadStatus();
-        await loadLogs(true, true);
       } else {
         notify(`UDP 网关重启失败: ${result.message ?? "未知错误"}`, "error");
       }
@@ -244,25 +244,21 @@
     }
   }
 
-  export async function loadLogs(silent = false, forceFollow = false) {
-    if (!silent) busyAction = "logs";
-    if (forceFollow) followLatestLogs = true;
+  export function loadLogs() {
+    followLatestLogs = true;
+    scrollLogsToBottom();
+    if (!logSocket || logSocket.readyState > WebSocket.OPEN) {
+      startLogStream();
+    }
+  }
+
+  async function appendLogChunk(chunk: string, forceFollow = false) {
+    if (!chunk) return;
 
     const previousScrollTop = logViewport?.scrollTop ?? 0;
     const shouldPinToBottom = forceFollow || followLatestLogs || isLogAtBottom();
-
-    try {
-      const result = await api.daemonLogs(1000);
-      if (result.success && result.data) {
-        await renderLogText(result.data.lines.length > 0 ? result.data.lines.join("\n") : "暂无日志", shouldPinToBottom, previousScrollTop);
-      } else {
-        await renderLogText(result.message ?? "日志读取失败", shouldPinToBottom, previousScrollTop);
-      }
-    } catch {
-      await renderLogText("日志请求失败", shouldPinToBottom, previousScrollTop);
-    } finally {
-      if (!silent) busyAction = null;
-    }
+    logsText += chunk;
+    await renderLogText(logsText || "暂无日志", shouldPinToBottom, previousScrollTop);
   }
 
   async function renderLogText(text: string, shouldPinToBottom = followLatestLogs, previousScrollTop = logViewport?.scrollTop ?? 0) {
@@ -281,6 +277,7 @@
 
   function resetLogView() {
     followLatestLogs = true;
+    logsText = "";
     logsHtml = "暂无日志";
     void tick().then(scrollLogsToBottom);
   }
@@ -300,17 +297,43 @@
     followLatestLogs = true;
   }
 
-  function startLogPoll() {
-    if (logTimer) return;
+  function startLogStream() {
+    if (logSocket || reconnectTimer) return;
     void loadStatus();
-    void loadLogs(true);
-    logTimer = window.setInterval(() => void loadLogs(true), 2000);
+    logSocket = new WebSocket(api.daemonLogsWsUrl());
+
+    logSocket.onmessage = (event) => {
+      if (typeof event.data === "string") {
+        void appendLogChunk(event.data);
+        return;
+      }
+      if (event.data instanceof Blob) {
+        void event.data.text().then((text) => appendLogChunk(text));
+      }
+    };
+
+    logSocket.onclose = () => {
+      logSocket = undefined;
+      if (!active || reconnectTimer) return;
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = undefined;
+        startLogStream();
+      }, 1000);
+    };
+
+    logSocket.onerror = () => {
+      logSocket?.close();
+    };
   }
 
-  function stopLogPoll() {
-    if (!logTimer) return;
-    window.clearInterval(logTimer);
-    logTimer = undefined;
+  function stopLogStream() {
+    if (reconnectTimer) {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = undefined;
+    }
+    if (!logSocket) return;
+    logSocket.close();
+    logSocket = undefined;
   }
 </script>
 
@@ -356,7 +379,7 @@
         <RotateCw size={16} class="mr-2" />
         重启
       </Button>
-      <Button class="glass-button" color="alternative" loading={busyAction === "logs"} disabled={!!busyAction} onclick={() => loadLogs(false)}>
+      <Button class="glass-button" color="alternative" disabled={!!busyAction} onclick={loadLogs}>
         <FileText size={16} class="mr-2" />
         日志
       </Button>

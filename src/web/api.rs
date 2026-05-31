@@ -1,12 +1,27 @@
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{
+        Query, State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::{
+    io,
+    path::{Path, PathBuf},
+    time::Duration,
+};
+use tokio::{
+    fs::File,
+    io::{AsyncReadExt, AsyncSeekExt, SeekFrom},
+};
 
 use crate::app::AppState;
+
+const LOG_WS_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 pub struct Utf8Json<T>(pub T);
 
@@ -228,5 +243,78 @@ pub async fn daemon_logs_handler(
     match state.daemon.logs(query.lines.unwrap_or(120)).await {
         Ok(logs) => ApiResponse::ok(logs).into_response(),
         Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn daemon_logs_ws_handler(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    let log_path = state.daemon.log_path();
+    ws.on_upgrade(move |socket| stream_daemon_logs(socket, log_path))
+}
+
+async fn stream_daemon_logs(socket: WebSocket, log_path: PathBuf) {
+    let (mut sender, mut receiver) = socket.split();
+    let mut offset = tokio::fs::metadata(&log_path)
+        .await
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
+    let mut ticker = tokio::time::interval(LOG_WS_POLL_INTERVAL);
+
+    loop {
+        tokio::select! {
+            _ = ticker.tick() => {
+                match read_new_log_chunk(&log_path, &mut offset).await {
+                    Ok(Some(chunk)) => {
+                        if sender.send(Message::Text(chunk.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        if sender.send(Message::Text(format!("日志读取失败: {err}\n").into())).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+            message = receiver.next() => {
+                match message {
+                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
+                    _ => {}
+                }
+            }
+            else => break,
+        }
+    }
+}
+
+async fn read_new_log_chunk(path: &Path, offset: &mut u64) -> io::Result<Option<String>> {
+    let metadata = match tokio::fs::metadata(path).await {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err),
+    };
+    let file_len = metadata.len();
+
+    if file_len < *offset {
+        *offset = 0;
+    }
+    if file_len <= *offset {
+        return Ok(None);
+    }
+
+    let mut file = File::open(path).await?;
+    file.seek(SeekFrom::Start(*offset)).await?;
+
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).await?;
+    *offset += buffer.len() as u64;
+
+    if buffer.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(String::from_utf8_lossy(&buffer).into_owned()))
     }
 }

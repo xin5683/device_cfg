@@ -222,6 +222,10 @@ impl DaemonService {
             .await
             .map_err(|err| UpdateError(err.to_string()))?
     }
+
+    pub fn log_path(&self) -> PathBuf {
+        self.config.log_path.clone()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

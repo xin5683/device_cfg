@@ -63,6 +63,7 @@ pub async fn run() {
             post(api::daemon_auto_start_handler),
         )
         .route("/api/daemon/logs", get(api::daemon_logs_handler))
+        .route("/api/daemon/logs/ws", get(api::daemon_logs_ws_handler))
         .with_state(state)
         .layer(build_cors());
 

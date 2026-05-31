@@ -4,7 +4,6 @@ import type {
   ConnectRequest,
   DaemonAutoStartRequest,
   DaemonInstallResult,
-  DaemonLogInfo,
   DaemonStartResult,
   DaemonStatus,
   DaemonUpdateInfo,
@@ -46,5 +45,8 @@ export const api = {
   startDaemon: () => request<DaemonStartResult>("/api/daemon/start", postJson()),
   restartDaemon: () => request<DaemonStartResult>("/api/daemon/restart", postJson()),
   setDaemonAutoStart: (body: DaemonAutoStartRequest) => request<DaemonStatus>("/api/daemon/auto-start", postJson(body)),
-  daemonLogs: (lines = 160) => request<DaemonLogInfo>(`/api/daemon/logs?lines=${lines}`)
+  daemonLogsWsUrl: () => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/api/daemon/logs/ws`;
+  }
 };

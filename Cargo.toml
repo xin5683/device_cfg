@@ -11,8 +11,9 @@ categories = ["embedded", "web-programming::http-server"]
 publish = false
 
 [dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 include_dir = "0.7"
+futures-util = "0.3"
 mime_guess = "2"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
