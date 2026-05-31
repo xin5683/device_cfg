@@ -28,27 +28,28 @@
 </script>
 
 <Card class="glass-card h-full max-w-none" size="xl">
-  <div class="flex items-start justify-between gap-4 p-5">
-    <div>
-      <p class="text-sm font-medium text-slate-600 dark:text-slate-300">{title}</p>
-      <h2 class="mt-1 text-xl font-semibold tracking-normal text-slate-950 dark:text-white">{summaryTitle}</h2>
-    </div>
-    <Badge color="blue" class="glass-badge shrink-0">{badge}</Badge>
-  </div>
-
-  <div class="px-5 pb-5">
-    <div class={`glass-lens glass-lens--${stateTone} mb-4 flex items-start justify-between gap-3 p-4`}>
-      <p class="relative text-sm text-slate-700 dark:text-slate-200">{summary}</p>
-      <Badge color={stateColor} class="glass-status-badge shrink-0">
-        <span class={`status-dot status-dot--${stateTone}`}></span>
-        {stateText}
-      </Badge>
+  <div class="flex h-full flex-col">
+    <div class="flex items-start justify-between gap-4 p-5">
+      <div>
+        <p class="text-sm font-medium text-slate-600 dark:text-slate-300">{title}</p>
+        <h2 class="mt-1 text-xl font-semibold tracking-normal text-slate-950 dark:text-white">{summaryTitle}</h2>
+      </div>
+      <Badge color="blue" class="glass-badge shrink-0">{badge}</Badge>
     </div>
 
-    <DetailRows {rows} />
+    <div class="flex flex-1 flex-col px-5 pb-5">
+      <div class={`glass-lens glass-lens--${stateTone} mb-4 flex items-start justify-between gap-3 p-4`}>
+        <p class="relative text-sm text-slate-700 dark:text-slate-200">{summary}</p>
+        <Badge color={stateColor} class="glass-status-badge shrink-0">
+          <span class={`status-dot status-dot--${stateTone}`}></span>
+          {stateText}
+        </Badge>
+      </div>
 
-    {#if actionLabel && onAction}
-      <div class="mt-4 flex justify-end">
+      <DetailRows {rows} />
+
+      <div class="mt-auto flex min-h-10 items-end justify-end pt-4">
+        {#if actionLabel && onAction}
         <Button
           color="alternative"
           size="sm"
@@ -59,7 +60,8 @@
         >
           {actionLabel}
         </Button>
+        {/if}
       </div>
-    {/if}
+    </div>
   </div>
 </Card>

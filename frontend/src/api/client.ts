@@ -7,8 +7,11 @@ import type {
   DaemonStartResult,
   DaemonStatus,
   DaemonUpdateInfo,
+  CanStatus,
   NetworkInfo,
   SystemInfo,
+  TimeStatus,
+  TimeSyncResult,
   UpdateInfo,
   WifiStatus
 } from "./types";
@@ -45,6 +48,13 @@ export const api = {
   startDaemon: () => request<DaemonStartResult>("/api/daemon/start", postJson()),
   restartDaemon: () => request<DaemonStartResult>("/api/daemon/restart", postJson()),
   setDaemonAutoStart: (body: DaemonAutoStartRequest) => request<DaemonStatus>("/api/daemon/auto-start", postJson(body)),
+  canStatus: () => request<CanStatus>("/api/diagnostic/can"),
+  timeStatus: () => request<TimeStatus>("/api/diagnostic/time"),
+  syncTime: () => request<TimeSyncResult>("/api/diagnostic/time/sync", postJson()),
+  diagnosticStatusWsUrl: () => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/api/diagnostic/status/ws`;
+  },
   daemonLogsWsUrl: () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${window.location.host}/api/daemon/logs/ws`;

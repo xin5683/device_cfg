@@ -16,6 +16,8 @@
 - WiFi 扫描
 - WiFi 连接与断开
 - 当前网络状态查询
+- CAN 接口与系统时间实时状态
+- 使用 `ntpd` 手动同步板卡时间
 - 从 GitHub Release 自更新
 - 跨域调用支持
 - `armv7` 与 `aarch64` 交叉编译
@@ -94,6 +96,9 @@ ssh root@<board-ip> "sudo env WPA_CTRL_DIR=/run/wpa_supplicant WIFI_IFACE=wlan1 
 - `DAEMON_ARGS`：启动 UDP 网关时附加的命令行参数，按空格分隔
 - `DAEMON_MIRRORS`：UDP 网关下载使用的 GitHub 镜像站列表，默认同 `UPDATE_MIRRORS`
 - `DAEMON_LOG_MAX_LINES`：UDP 网关日志文件最大保留行数，默认 `2000`
+- `CAN_IFACE`：诊断状态读取的 CAN 接口名，默认 `can0`
+- `NTP_SERVER`：互联网时间源与手动同步使用的 NTP 服务器，默认 `pool.ntp.org`
+- `NTPD_BIN`：手动同步调用的 `ntpd` 可执行文件，默认 `ntpd`
 
 UDP 网关安装后会在安装目录保存版本信息，默认路径为：
 
@@ -154,6 +159,14 @@ device_cfg-armv7-unknown-linux-musleabihf.tar.gz
 ```
 
 压缩包内的二进制文件名需要是 `device_cfg-<target>`。更新完成后需要重启服务让新版本生效。
+
+### `GET /api/diagnostic/status/ws`
+
+WebSocket 推送 CAN 接口状态、RX/TX packets、板卡时间、互联网时间和互联网连接状态，用于首页状态区实时展示。
+
+### `POST /api/diagnostic/time/sync`
+
+通过 `ntpd -q -p <NTP_SERVER>` 手动同步板卡时间。
 
 ## 架构
 

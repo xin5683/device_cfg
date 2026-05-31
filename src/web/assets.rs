@@ -15,6 +15,14 @@ pub async fn asset(Path(path): Path<String>) -> Response {
     serve_embedded_file(&format!("assets/{path}"))
 }
 
+pub async fn favicon_svg() -> Response {
+    serve_embedded_file("favicon.svg")
+}
+
+pub async fn favicon_ico() -> Response {
+    serve_embedded_file("favicon.ico")
+}
+
 fn serve_embedded_file(path: &str) -> Response {
     let normalized = path.trim_start_matches('/');
     if normalized.is_empty() || normalized.contains("..") {

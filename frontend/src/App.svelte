@@ -3,15 +3,19 @@
   import { fade, scale } from "svelte/transition";
   import { Badge, Button, Tabs, TabItem, Toast } from "flowbite-svelte";
   import { Activity, FileText, Radio, RefreshCw, Server, Wifi, X } from "@lucide/svelte";
+  import CompactStatusCard from "./components/CompactStatusCard.svelte";
   import StatusCard from "./components/StatusCard.svelte";
   import WifiTab from "./tabs/WifiTab.svelte";
   import UpdateTab from "./tabs/UpdateTab.svelte";
   import DaemonTab from "./tabs/DaemonTab.svelte";
+  import DiagnosticTab from "./tabs/DiagnosticTab.svelte";
   import { api } from "./api/client";
-  import type { DaemonStatus, WifiStatus } from "./api/types";
+  import type { ApiResponse, CanStatus, DaemonStatus, DiagnosticStatus, TimeStatus, WifiStatus } from "./api/types";
   import type { DetailRow } from "./utils/format";
   import { compactTarget, stateLabel, statusDescription } from "./utils/format";
   import type { ToastKind, ToastMessage } from "./utils/toast";
+
+  type CompactMetric = [label: string, value: string | number | null | undefined];
 
   let systemVersion = "加载中";
   let activeTab = "wifi";
@@ -19,10 +23,16 @@
   let wifiStatusError: string | null = null;
   let daemonStatus: DaemonStatus | null = null;
   let daemonStatusError: string | null = null;
+  let canStatus: CanStatus | null = null;
+  let canStatusError: string | null = null;
+  let timeStatus: TimeStatus | null = null;
+  let timeStatusError: string | null = null;
   let disconnecting = false;
   let startingDaemon = false;
   let updatePanelOpen = false;
   let statusPollTimer: number | undefined;
+  let diagnosticSocket: WebSocket | undefined;
+  let diagnosticReconnectTimer: number | undefined;
   let toastId = 0;
   let toasts: ToastMessage[] = [];
 
@@ -45,17 +55,39 @@
           : "未安装"
       : "加载中";
   $: daemonRows = buildDaemonRows(daemonStatus);
+  $: canStateText = canStatusError
+    ? "不可用"
+    : canStatus
+      ? canStatus.up
+        ? "已启用"
+        : canStatus.exists
+          ? "未启用"
+          : "不存在"
+      : "加载中";
+  $: canRows = buildCanRows(canStatus);
+  $: canMetrics = buildCanMetrics(canStatus);
+  $: timeStateText = timeStatusError
+    ? "不可用"
+    : timeStatus
+      ? timeStatus.internet_connected
+        ? "已连接"
+        : "无互联网"
+      : "加载中";
+  $: timeRows = buildTimeRows(timeStatus);
+  $: timeMetrics = buildTimeMetrics(timeStatus);
 
   onMount(() => {
     void loadSystemInfo();
     void loadWifiStatus();
     void loadDaemonStatus();
+    startDiagnosticStream();
   });
 
   onDestroy(() => {
     if (statusPollTimer) {
       window.clearInterval(statusPollTimer);
     }
+    stopDiagnosticStream();
   });
 
   function buildWifiRows(status: WifiStatus | null, connected: boolean): DetailRow[] {
@@ -86,6 +118,69 @@
       ["PID", status?.pid],
       ["自启动", status ? (status.auto_start ? "已开启" : "已关闭") : "-"],
       ["目标架构", compactTarget(status?.target)]
+    ];
+  }
+
+  function buildCanRows(status: CanStatus | null): DetailRow[] {
+    return [
+      ["接口状态", status ? (status.exists ? status.operstate : "未发现接口") : "-"],
+      ["RX packets", status?.rx_packets],
+      ["TX packets", status?.tx_packets],
+      ["RX errors", status?.rx_errors],
+      ["TX errors", status?.tx_errors]
+    ];
+  }
+
+  function buildCanMetrics(status: CanStatus | null): CompactMetric[] {
+    return [
+      ["负载", formatCanLoad(status?.load_percent)],
+      ["波特率", formatCanBitrate(status?.bitrate)],
+      ["RX/TX", status ? `${formatCanCount(status.rx_packets)}/${formatCanCount(status.tx_packets)}` : "-"],
+      ["错误", status ? `${formatCanCount(status.rx_errors)}/${formatCanCount(status.tx_errors)}` : "-"]
+    ];
+  }
+
+  function formatCanCount(value: number | null | undefined) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+    if (value >= 1_000_000_000) return `${trimMetric(value / 1_000_000_000)}G`;
+    if (value >= 1_000_000) return `${trimMetric(value / 1_000_000)}M`;
+    if (value >= 1_000) return `${trimMetric(value / 1_000)}K`;
+    return `${value}`;
+  }
+
+  function trimMetric(value: number) {
+    return value.toFixed(2).replace(/\.?0+$/, "");
+  }
+
+  function formatCanLoad(loadPercent: number | null | undefined) {
+    if (typeof loadPercent !== "number" || !Number.isFinite(loadPercent)) return "--";
+    if (loadPercent < 0.1) return "0.0%";
+    if (loadPercent < 10) return `${loadPercent.toFixed(1)}%`;
+    return `${Math.round(loadPercent)}%`;
+  }
+
+  function formatCanBitrate(bitrate: number | null | undefined) {
+    if (typeof bitrate !== "number" || !Number.isFinite(bitrate) || bitrate <= 0) return "-";
+    if (bitrate >= 1_000_000) return `${bitrate / 1_000_000}M`;
+    if (bitrate >= 1_000) return `${Math.round(bitrate / 1_000)}K`;
+    return `${bitrate}`;
+  }
+
+  function buildTimeRows(status: TimeStatus | null): DetailRow[] {
+    return [
+      ["板卡时间", status?.board_time],
+      ["互联网时间", status?.internet_time],
+      ["NTP 服务器", status?.ntp_server],
+      ["连接状态", status ? (status.internet_connected ? "互联网可用" : "互联网不可用") : "-"]
+    ];
+  }
+
+  function buildTimeMetrics(status: TimeStatus | null): CompactMetric[] {
+    return [
+      ["板卡时间", status?.board_time],
+      ["互联网时间", status?.internet_time],
+      ["NTP", status?.ntp_server],
+      ["互联网", status ? (status.internet_connected ? "可用" : "不可用") : "-"]
     ];
   }
 
@@ -138,6 +233,56 @@
     } catch {
       daemonStatusError = "服务未响应";
     }
+  }
+
+  function startDiagnosticStream() {
+    if (diagnosticSocket || diagnosticReconnectTimer) return;
+
+    diagnosticSocket = new WebSocket(api.diagnosticStatusWsUrl());
+
+    diagnosticSocket.onmessage = (event) => {
+      if (typeof event.data !== "string") return;
+
+      try {
+        const result = JSON.parse(event.data) as ApiResponse<DiagnosticStatus>;
+        if (result.success && result.data) {
+          canStatus = result.data.can;
+          timeStatus = result.data.time;
+          canStatusError = null;
+          timeStatusError = null;
+        } else {
+          const message = result.message ?? "诊断状态推送异常";
+          canStatusError = message;
+          timeStatusError = message;
+        }
+      } catch {
+        canStatusError = "诊断状态解析失败";
+        timeStatusError = "诊断状态解析失败";
+      }
+    };
+
+    diagnosticSocket.onclose = () => {
+      diagnosticSocket = undefined;
+      if (diagnosticReconnectTimer) return;
+      diagnosticReconnectTimer = window.setTimeout(() => {
+        diagnosticReconnectTimer = undefined;
+        startDiagnosticStream();
+      }, 1500);
+    };
+
+    diagnosticSocket.onerror = () => {
+      diagnosticSocket?.close();
+    };
+  }
+
+  function stopDiagnosticStream() {
+    if (diagnosticReconnectTimer) {
+      window.clearTimeout(diagnosticReconnectTimer);
+      diagnosticReconnectTimer = undefined;
+    }
+    if (!diagnosticSocket) return;
+    diagnosticSocket.close();
+    diagnosticSocket = undefined;
   }
 
   function startStatusPoll() {
@@ -233,7 +378,10 @@
       </div>
     </header>
 
-    <section class="grid gap-4 lg:grid-cols-2" aria-label="状态卡片区域">
+    <section
+      class="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)] xl:items-start"
+      aria-label="状态卡片区域"
+    >
       <StatusCard
         title="WiFi 状态"
         badge="wlan1"
@@ -266,6 +414,38 @@
         actionLoading={startingDaemon}
         onAction={startDaemon}
       />
+
+      <div class="grid gap-4 md:col-span-2 md:grid-cols-2 xl:col-span-1 xl:grid-cols-1">
+        <CompactStatusCard
+          title="CAN 接口"
+          badge={canStatus?.iface ?? "can0"}
+          summaryTitle="can0 状态"
+          summary={canStatusError ??
+            (canStatus
+              ? canStatus.exists
+                ? `RX ${formatCanCount(canStatus.rx_packets)} / TX ${formatCanCount(canStatus.tx_packets)}`
+                : "未发现 can0 接口"
+              : "正在读取 CAN 接口状态")}
+          stateText={canStateText}
+          stateTone={canStatus?.up ? "connected" : canStatus ? "disconnected" : "loading"}
+          metrics={canMetrics}
+        />
+
+        <CompactStatusCard
+          title="系统时间"
+          badge="ntpd"
+          summaryTitle="板卡 / 互联网"
+          summary={timeStatusError ??
+            (timeStatus
+              ? timeStatus.internet_connected
+                ? "互联网时间源可用"
+                : timeStatus.error ?? "无法连接互联网时间源"
+              : "正在读取系统时间")}
+          stateText={timeStateText}
+          stateTone={timeStatus?.internet_connected ? "connected" : timeStatus ? "disconnected" : "loading"}
+          metrics={timeMetrics}
+        />
+      </div>
     </section>
 
     <section class="glass-tabs-shell">
@@ -282,7 +462,7 @@
           {/snippet}
         </TabItem>
 
-        <TabItem key="diagnostic" disabled>
+        <TabItem key="diagnostic">
           {#snippet titleSlot()}
             <span class="inline-flex items-center gap-2"><Radio size={18} />诊断工具</span>
           {/snippet}
@@ -321,6 +501,22 @@
             on:statusChanged={(event) => {
               daemonStatus = event.detail.status;
               daemonStatusError = null;
+            }}
+          />
+        </section>
+
+        <section
+          class="glass-tab-panel"
+          class:glass-tab-panel--active={activeTab === "diagnostic"}
+          hidden={activeTab !== "diagnostic"}
+          aria-label="诊断工具"
+        >
+          <DiagnosticTab
+            {timeStatus}
+            on:toast={(event) => showToast(event.detail.text, event.detail.kind)}
+            on:timeChanged={(event) => {
+              timeStatus = event.detail.status;
+              timeStatusError = null;
             }}
           />
         </section>

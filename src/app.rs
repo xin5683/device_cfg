@@ -9,6 +9,7 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::{
     device::{
         daemon::{DaemonConfig, DaemonService},
+        system::{SystemDiagnosticConfig, SystemDiagnosticService},
         update::{UpdateConfig, UpdateService},
         wifi::{WifiConfig, WifiService},
     },
@@ -20,6 +21,7 @@ pub struct AppState {
     pub wifi: Arc<WifiService>,
     pub update: Arc<UpdateService>,
     pub daemon: Arc<DaemonService>,
+    pub system: Arc<SystemDiagnosticService>,
 }
 
 pub async fn run() {
@@ -27,15 +29,20 @@ pub async fn run() {
     let wifi = Arc::new(WifiService::new(WifiConfig::from_env()));
     let update = Arc::new(UpdateService::new(UpdateConfig::from_env()));
     let daemon = Arc::new(DaemonService::new(DaemonConfig::from_env()));
+    let system = Arc::new(SystemDiagnosticService::new(
+        SystemDiagnosticConfig::from_env(),
+    ));
     let state = AppState {
         wifi,
         update,
         daemon,
+        system,
     };
 
     state.wifi.print_config();
     state.update.print_config();
     state.daemon.print_config();
+    state.system.print_config();
     match state.daemon.start_if_auto_start().await {
         Ok(Some(result)) => println!("XPlaneUDP 自启动完成: pid={}", result.pid),
         Ok(None) => {}
@@ -45,6 +52,8 @@ pub async fn run() {
     let app = Router::new()
         .route("/", get(assets::index))
         .route("/assets/{*path}", get(assets::asset))
+        .route("/favicon.svg", get(assets::favicon_svg))
+        .route("/favicon.ico", get(assets::favicon_ico))
         .route("/api/system/info", get(api::system_info_handler))
         .route("/api/scan", get(api::scan_handler))
         .route("/api/status", get(api::status_handler))
@@ -64,6 +73,16 @@ pub async fn run() {
         )
         .route("/api/daemon/logs", get(api::daemon_logs_handler))
         .route("/api/daemon/logs/ws", get(api::daemon_logs_ws_handler))
+        .route("/api/diagnostic/can", get(api::diagnostic_can_handler))
+        .route("/api/diagnostic/time", get(api::diagnostic_time_handler))
+        .route(
+            "/api/diagnostic/time/sync",
+            post(api::diagnostic_time_sync_handler),
+        )
+        .route(
+            "/api/diagnostic/status/ws",
+            get(api::diagnostic_status_ws_handler),
+        )
         .with_state(state)
         .layer(build_cors());
 

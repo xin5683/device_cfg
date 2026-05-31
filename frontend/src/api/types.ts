@@ -104,3 +104,40 @@ export type DaemonLogInfo = {
   path: string;
   lines: string[];
 };
+
+export type CanStatus = {
+  iface: string;
+  exists: boolean;
+  operstate: string;
+  carrier?: boolean | null;
+  up: boolean;
+  bitrate?: number | null;
+  load_percent?: number | null;
+  rx_packets: number;
+  tx_packets: number;
+  rx_bytes: number;
+  tx_bytes: number;
+  rx_errors: number;
+  tx_errors: number;
+};
+
+export type TimeStatus = {
+  board_time: string;
+  board_unix_ms: number;
+  internet_time?: string | null;
+  internet_unix_ms?: number | null;
+  internet_connected: boolean;
+  ntp_server: string;
+  error?: string | null;
+};
+
+export type TimeSyncResult = {
+  synced: boolean;
+  ntp_server: string;
+  output: string;
+};
+
+export type DiagnosticStatus = {
+  can: CanStatus;
+  time: TimeStatus;
+};
