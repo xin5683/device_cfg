@@ -24,8 +24,7 @@ const DEFAULT_BIN_NAME: &str = "XPlaneUDP";
 const DEFAULT_GITHUB_API_URL: &str = "https://api.github.com";
 const DEFAULT_INSTALL_DIR: &str = "/opt/device_cfg/udp_gw";
 const DEFAULT_LOG_FILE: &str = "udp_gw_builder.log";
-const DEFAULT_PID_FILE: &str = "udp_gw_builder.pid";
-const DEFAULT_VERSION_FILE: &str = "udp_gw_builder.version.json";
+const DEFAULT_STATE_FILE: &str = "udp_gw_builder.state.json";
 const DEFAULT_LOG_MAX_LINES: usize = 2000;
 const RESTART_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 const LOG_TRIM_INTERVAL: Duration = Duration::from_secs(10);
@@ -41,10 +40,10 @@ pub struct DaemonConfig {
     mirrors: Vec<String>,
     install_dir: PathBuf,
     log_path: PathBuf,
-    pid_path: PathBuf,
-    version_path: PathBuf,
+    state_path: PathBuf,
     log_max_lines: usize,
     args: Vec<String>,
+    default_auto_start: bool,
 }
 
 impl DaemonConfig {
@@ -55,12 +54,9 @@ impl DaemonConfig {
         let log_path = env::var("DAEMON_LOG_PATH")
             .map(PathBuf::from)
             .unwrap_or_else(|_| install_dir.join(DEFAULT_LOG_FILE));
-        let pid_path = env::var("DAEMON_PID_PATH")
+        let state_path = env::var("DAEMON_STATE_PATH")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| install_dir.join(DEFAULT_PID_FILE));
-        let version_path = env::var("DAEMON_VERSION_PATH")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| install_dir.join(DEFAULT_VERSION_FILE));
+            .unwrap_or_else(|_| install_dir.join(DEFAULT_STATE_FILE));
 
         Self {
             repo_owner: env::var("DAEMON_REPO_OWNER")
@@ -88,8 +84,7 @@ impl DaemonConfig {
                 .unwrap_or_else(default_mirrors),
             install_dir,
             log_path,
-            pid_path,
-            version_path,
+            state_path,
             log_max_lines: env::var("DAEMON_LOG_MAX_LINES")
                 .ok()
                 .and_then(|value| value.parse().ok())
@@ -99,12 +94,16 @@ impl DaemonConfig {
                 .ok()
                 .map(|value| value.split_whitespace().map(ToOwned::to_owned).collect())
                 .unwrap_or_default(),
+            default_auto_start: env::var("DAEMON_AUTO_START")
+                .ok()
+                .and_then(|value| parse_bool(&value))
+                .unwrap_or(false),
         }
     }
 
     pub fn print_config(&self) {
         println!(
-            "守护进程配置: repo={}/{}, asset_prefix={}, bin={}, target={}, install_dir={}, log={}, log_max_lines={}, mirrors={}",
+            "守护进程配置: repo={}/{}, asset_prefix={}, bin={}, target={}, install_dir={}, log={}, state={}, auto_start_default={}, log_max_lines={}, mirrors={}",
             self.repo_owner,
             self.repo_name,
             self.asset_prefix,
@@ -112,6 +111,8 @@ impl DaemonConfig {
             self.target,
             self.install_dir.display(),
             self.log_path.display(),
+            self.state_path.display(),
+            self.default_auto_start,
             self.log_max_lines,
             self.mirrors.join(",")
         );
@@ -180,12 +181,39 @@ impl DaemonService {
             .map_err(|err| UpdateError(err.to_string()))?
     }
 
+    pub async fn start_if_auto_start(&self) -> Result<Option<DaemonStartResult>> {
+        let config = self.config.clone();
+        let child = Arc::clone(&self.child);
+        tokio::task::spawn_blocking(move || {
+            if !read_daemon_state(&config)?.auto_start {
+                return Ok(None);
+            }
+
+            start_daemon(&config, &child).map(Some)
+        })
+        .await
+        .map_err(|err| UpdateError(err.to_string()))?
+    }
+
     pub async fn restart(&self) -> Result<DaemonStartResult> {
         let config = self.config.clone();
         let child = Arc::clone(&self.child);
         tokio::task::spawn_blocking(move || restart_daemon(&config, &child))
             .await
             .map_err(|err| UpdateError(err.to_string()))?
+    }
+
+    pub async fn set_auto_start(&self, auto_start: bool) -> Result<DaemonStatus> {
+        let config = self.config.clone();
+        let child = Arc::clone(&self.child);
+        tokio::task::spawn_blocking(move || {
+            let mut state = read_daemon_state(&config)?;
+            state.auto_start = auto_start;
+            write_daemon_state(&config, &state)?;
+            daemon_status(&config, &child)
+        })
+        .await
+        .map_err(|err| UpdateError(err.to_string()))?
     }
 
     pub async fn logs(&self, lines: usize) -> Result<DaemonLogInfo> {
@@ -207,8 +235,8 @@ pub struct DaemonStatus {
     pub executable_path: String,
     pub install_dir: String,
     pub log_path: String,
-    pub pid_path: String,
-    pub version_path: String,
+    pub state_path: String,
+    pub auto_start: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -272,6 +300,18 @@ struct InstalledVersion {
     sha256: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DaemonState {
+    auto_start: bool,
+    installed: Option<InstalledVersion>,
+    runtime: DaemonRuntime,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct DaemonRuntime {
+    pid: Option<u32>,
+}
+
 enum InstallMode {
     Pull,
     Upgrade,
@@ -279,7 +319,8 @@ enum InstallMode {
 
 fn daemon_status(config: &DaemonConfig, child: &Arc<Mutex<Option<Child>>>) -> Result<DaemonStatus> {
     let pid = running_pid(config, child)?;
-    let version = read_installed_version(config)?;
+    let state = read_daemon_state(config)?;
+    let version = state.installed;
     Ok(DaemonStatus {
         running: pid.is_some(),
         pid,
@@ -290,8 +331,8 @@ fn daemon_status(config: &DaemonConfig, child: &Arc<Mutex<Option<Child>>>) -> Re
         executable_path: config.executable_path().display().to_string(),
         install_dir: config.install_dir.display().to_string(),
         log_path: config.log_path.display().to_string(),
-        pid_path: config.pid_path.display().to_string(),
-        version_path: config.version_path.display().to_string(),
+        state_path: config.state_path.display().to_string(),
+        auto_start: state.auto_start,
     })
 }
 
@@ -388,7 +429,8 @@ fn build_update_info(config: &DaemonConfig, release: &DaemonRelease) -> DaemonUp
 
 fn install_latest(config: DaemonConfig, mode: InstallMode) -> Result<DaemonInstallResult> {
     let release = fetch_latest_release(&config)?;
-    let previous_version = read_installed_version(&config)?.map(|value| value.version);
+    let mut state = read_daemon_state(&config)?;
+    let previous_version = state.installed.as_ref().map(|value| value.version.clone());
     if matches!(mode, InstallMode::Upgrade)
         && previous_version
             .as_deref()
@@ -441,13 +483,13 @@ fn install_latest(config: DaemonConfig, mode: InstallMode) -> Result<DaemonInsta
     let extracted_bin = find_extracted_binary(&extract_dir, &config.bin_name)?;
     install_binary(&extracted_bin, &config.executable_path())?;
 
-    let installed = InstalledVersion {
+    state.installed = Some(InstalledVersion {
         version: release.version.clone(),
         target: config.target.clone(),
         asset_name: asset.name.clone(),
         sha256: actual_sha256.clone(),
-    };
-    fs::write(&config.version_path, serde_json::to_vec_pretty(&installed)?)?;
+    });
+    write_daemon_state(&config, &state)?;
 
     Ok(DaemonInstallResult {
         previous_version,
@@ -573,7 +615,9 @@ fn start_daemon(
         .stderr(Stdio::from(stderr))
         .spawn()?;
     let pid = child.id();
-    fs::write(&config.pid_path, pid.to_string())?;
+    let mut state = read_daemon_state(config)?;
+    state.runtime.pid = Some(pid);
+    write_daemon_state(config, &state)?;
     *child_ref
         .lock()
         .map_err(|_| UpdateError("守护进程状态锁已损坏".to_string()))? = Some(child);
@@ -614,17 +658,17 @@ fn stop_daemon(config: &DaemonConfig, child_ref: &Arc<Mutex<Option<Child>>>) -> 
         if child.try_wait()?.is_none() {
             terminate_child(child)?;
         }
-        let _ = fs::remove_file(&config.pid_path);
+        clear_runtime_pid(config)?;
         return Ok(());
     }
 
-    if let Some(pid) = read_pid(&config.pid_path) {
+    if let Some(pid) = read_daemon_state(config)?.runtime.pid {
         if process_matches(pid, &config.executable_path()) {
             terminate_pid(pid)?;
             wait_for_process_exit(pid, &config.executable_path())?;
         }
     }
-    let _ = fs::remove_file(&config.pid_path);
+    clear_runtime_pid(config)?;
     Ok(())
 }
 
@@ -708,23 +752,19 @@ fn running_pid(
             return Ok(Some(child.id()));
         }
         *child_guard = None;
-        let _ = fs::remove_file(&config.pid_path);
+        clear_runtime_pid(config)?;
         return Ok(None);
     }
     drop(child_guard);
 
-    let pid = read_pid(&config.pid_path);
+    let pid = read_daemon_state(config)?.runtime.pid;
     if pid.is_some_and(|value| process_matches(value, &config.executable_path())) {
         return Ok(pid);
     }
     if pid.is_some() {
-        let _ = fs::remove_file(&config.pid_path);
+        clear_runtime_pid(config)?;
     }
     Ok(None)
-}
-
-fn read_pid(path: &Path) -> Option<u32> {
-    fs::read_to_string(path).ok()?.trim().parse().ok()
 }
 
 fn process_matches(pid: u32, executable: &Path) -> bool {
@@ -743,13 +783,44 @@ fn process_matches(pid: u32, executable: &Path) -> bool {
 }
 
 fn read_installed_version(config: &DaemonConfig) -> Result<Option<InstalledVersion>> {
-    if !config.version_path.is_file() {
-        return Ok(None);
+    Ok(read_daemon_state(config)?.installed)
+}
+
+fn read_daemon_state(config: &DaemonConfig) -> Result<DaemonState> {
+    if !config.state_path.is_file() {
+        return Ok(DaemonState {
+            auto_start: config.default_auto_start,
+            installed: None,
+            runtime: DaemonRuntime::default(),
+        });
     }
-    let text = fs::read_to_string(&config.version_path)?;
-    serde_json::from_str(&text)
-        .map(Some)
-        .map_err(UpdateError::from)
+
+    let text = fs::read_to_string(&config.state_path)?;
+    serde_json::from_str(&text).map_err(UpdateError::from)
+}
+
+fn write_daemon_state(config: &DaemonConfig, state: &DaemonState) -> Result<()> {
+    if let Some(parent) = config.state_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    fs::write(&config.state_path, serde_json::to_vec_pretty(state)?)?;
+    Ok(())
+}
+
+fn clear_runtime_pid(config: &DaemonConfig) -> Result<()> {
+    let mut state = read_daemon_state(config)?;
+    state.runtime.pid = None;
+    write_daemon_state(config, &state)?;
+    Ok(())
+}
+
+fn parse_bool(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "y" | "on" => Some(true),
+        "0" | "false" | "no" | "n" | "off" => Some(false),
+        _ => None,
+    }
 }
 
 fn read_logs(config: &DaemonConfig, lines: usize) -> Result<DaemonLogInfo> {

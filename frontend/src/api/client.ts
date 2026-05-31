@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   ApplyUpdateResult,
   ConnectRequest,
+  DaemonAutoStartRequest,
   DaemonInstallResult,
   DaemonLogInfo,
   DaemonStartResult,
@@ -44,5 +45,6 @@ export const api = {
   upgradeDaemon: () => request<DaemonInstallResult>("/api/daemon/upgrade", postJson()),
   startDaemon: () => request<DaemonStartResult>("/api/daemon/start", postJson()),
   restartDaemon: () => request<DaemonStartResult>("/api/daemon/restart", postJson()),
+  setDaemonAutoStart: (body: DaemonAutoStartRequest) => request<DaemonStatus>("/api/daemon/auto-start", postJson(body)),
   daemonLogs: (lines = 160) => request<DaemonLogInfo>(`/api/daemon/logs?lines=${lines}`)
 };

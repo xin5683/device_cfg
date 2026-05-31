@@ -90,6 +90,11 @@ pub struct LogQuery {
     pub lines: Option<usize>,
 }
 
+#[derive(Deserialize)]
+pub struct DaemonAutoStartRequest {
+    pub auto_start: bool,
+}
+
 pub async fn system_info_handler() -> impl IntoResponse {
     ApiResponse::ok(SystemInfo {
         version: env!("CARGO_PKG_VERSION"),
@@ -202,6 +207,16 @@ pub async fn daemon_start_handler(State(state): State<AppState>) -> impl IntoRes
 pub async fn daemon_restart_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.daemon.restart().await {
         Ok(result) => ApiResponse::ok(result).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn daemon_auto_start_handler(
+    State(state): State<AppState>,
+    Json(req): Json<DaemonAutoStartRequest>,
+) -> impl IntoResponse {
+    match state.daemon.set_auto_start(req.auto_start).await {
+        Ok(status) => ApiResponse::ok(status).into_response(),
         Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
     }
 }

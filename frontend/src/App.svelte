@@ -87,6 +87,7 @@
     return [
       ["安装版本", status?.installed_version ? `v${status.installed_version}` : "-"],
       ["PID", status?.pid],
+      ["自启动", status ? (status.auto_start ? "已开启" : "已关闭") : "-"],
       ["目标架构", compactTarget(status?.target)]
     ];
   }

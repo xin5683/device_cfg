@@ -36,6 +36,11 @@ pub async fn run() {
     state.wifi.print_config();
     state.update.print_config();
     state.daemon.print_config();
+    match state.daemon.start_if_auto_start().await {
+        Ok(Some(result)) => println!("XPlaneUDP 自启动完成: pid={}", result.pid),
+        Ok(None) => {}
+        Err(err) => eprintln!("XPlaneUDP 自启动失败: {}", err),
+    }
 
     let app = Router::new()
         .route("/", get(assets::index))
@@ -53,6 +58,10 @@ pub async fn run() {
         .route("/api/daemon/upgrade", post(api::daemon_upgrade_handler))
         .route("/api/daemon/start", post(api::daemon_start_handler))
         .route("/api/daemon/restart", post(api::daemon_restart_handler))
+        .route(
+            "/api/daemon/auto-start",
+            post(api::daemon_auto_start_handler),
+        )
         .route("/api/daemon/logs", get(api::daemon_logs_handler))
         .with_state(state)
         .layer(build_cors());

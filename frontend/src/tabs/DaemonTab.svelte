@@ -23,10 +23,11 @@
   let summary = "正在获取守护进程状态。";
   let details: DetailRow[] = [];
   let logsHtml = "暂无日志";
-  let busyAction: "check" | "pull" | "upgrade" | "start" | "restart" | "logs" | null = null;
+  let busyAction: "check" | "pull" | "upgrade" | "start" | "restart" | "logs" | "auto-start" | null = null;
   let status: DaemonStatus | null = null;
   let canUpgrade = false;
   let logTimer: number | undefined;
+  let autoStart = false;
 
   $: if (active) {
     startLogPoll();
@@ -42,6 +43,7 @@
 
   function renderStatus(nextStatus: DaemonStatus) {
     status = nextStatus;
+    autoStart = nextStatus.auto_start;
     const installedVersion = nextStatus.installed_version ? `v${nextStatus.installed_version}` : "-";
     const stateText = nextStatus.running ? "运行中" : nextStatus.installed ? "已安装" : "未安装";
 
@@ -56,9 +58,10 @@
       ["PID", nextStatus.pid],
       ["安装版本", installedVersion],
       ["目标平台", nextStatus.target],
+      ["自启动", nextStatus.auto_start ? "已开启" : "已关闭"],
       ["可执行文件", nextStatus.executable_path],
       ["日志文件", nextStatus.log_path],
-      ["版本文件", nextStatus.version_path]
+      ["状态文件", nextStatus.state_path]
     ];
     dispatch("statusChanged", { status: nextStatus });
   }
@@ -211,6 +214,28 @@
     }
   }
 
+  async function setAutoStart(enabled: boolean) {
+    const previous = autoStart;
+    autoStart = enabled;
+    busyAction = "auto-start";
+
+    try {
+      const result = await api.setDaemonAutoStart({ auto_start: enabled });
+      if (result.success && result.data) {
+        renderStatus(result.data);
+        notify(enabled ? "UDP 网关自启动已开启" : "UDP 网关自启动已关闭", "success");
+      } else {
+        autoStart = previous;
+        notify(`自启动设置失败: ${result.message ?? "未知错误"}`, "error");
+      }
+    } catch {
+      autoStart = previous;
+      notify("自启动设置请求失败", "error");
+    } finally {
+      busyAction = null;
+    }
+  }
+
   export async function loadLogs(silent = false) {
     if (!silent) busyAction = "logs";
 
@@ -252,7 +277,22 @@
       <h2 class="text-xl font-semibold tracking-normal text-slate-950 dark:text-white">UDP 网关</h2>
       <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">管理 XPlaneUDP 守护进程</p>
     </div>
-    <div class="flex flex-wrap gap-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        class="glass-switch"
+        class:glass-switch--checked={autoStart}
+        role="switch"
+        aria-checked={autoStart}
+        aria-label="XPlaneUDP 自启动"
+        disabled={!!busyAction}
+        onclick={() => setAutoStart(!autoStart)}
+      >
+        <span class="glass-switch__track" aria-hidden="true">
+          <span class="glass-switch__thumb"></span>
+        </span>
+        <span class="glass-switch__label">自启动</span>
+      </button>
       <Button class="glass-button" color="alternative" loading={busyAction === "check"} disabled={!!busyAction} onclick={checkDaemon}>
         <RefreshCw size={16} class="mr-2" />
         检查

@@ -62,8 +62,12 @@ export type DaemonStatus = {
   executable_path: string;
   install_dir: string;
   log_path: string;
-  pid_path: string;
-  version_path: string;
+  state_path: string;
+  auto_start: boolean;
+};
+
+export type DaemonAutoStartRequest = {
+  auto_start: boolean;
 };
 
 export type DaemonUpdateInfo = {
