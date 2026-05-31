@@ -132,6 +132,13 @@ pub async fn system_info_handler() -> impl IntoResponse {
     .into_response()
 }
 
+pub async fn system_reboot_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.system.reboot().await {
+        Ok(result) => ApiResponse::ok(result).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
 pub async fn scan_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.wifi.scan().await {
         Ok(networks) => {

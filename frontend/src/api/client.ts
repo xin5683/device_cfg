@@ -9,6 +9,7 @@ import type {
   DaemonUpdateInfo,
   CanStatus,
   NetworkInfo,
+  RebootResult,
   SystemInfo,
   TimeStatus,
   TimeSyncResult,
@@ -35,6 +36,7 @@ function postJson<TBody>(body?: TBody): RequestInit {
 
 export const api = {
   systemInfo: () => request<SystemInfo>("/api/system/info"),
+  rebootSystem: () => request<RebootResult>("/api/system/reboot", postJson()),
   scanNetworks: () => request<NetworkInfo[]>("/api/scan"),
   wifiStatus: () => request<WifiStatus>("/api/status"),
   connectWifi: (body: ConnectRequest) => request<string>("/api/connect", postJson(body)),

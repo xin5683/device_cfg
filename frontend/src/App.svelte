@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { fade, scale } from "svelte/transition";
-  import { Badge, Button, Tabs, TabItem, Toast } from "flowbite-svelte";
-  import { Activity, FileText, Radio, RefreshCw, Server, Wifi, X } from "@lucide/svelte";
+  import { scale } from "svelte/transition";
+  import { Button, Tabs, TabItem, Toast } from "flowbite-svelte";
+  import { Activity, FileText, Power, Radio, RefreshCw, Server, Wifi, X } from "@lucide/svelte";
   import CompactStatusCard from "./components/CompactStatusCard.svelte";
+  import ModalLayer from "./components/ModalLayer.svelte";
   import StatusCard from "./components/StatusCard.svelte";
   import WifiTab from "./tabs/WifiTab.svelte";
   import UpdateTab from "./tabs/UpdateTab.svelte";
@@ -13,6 +14,7 @@
   import type { ApiResponse, CanStatus, DaemonStatus, DiagnosticStatus, TimeStatus, WifiStatus } from "./api/types";
   import type { DetailRow } from "./utils/format";
   import { compactTarget, stateLabel, statusDescription } from "./utils/format";
+  import { modalOpen } from "./utils/modal";
   import type { ToastKind, ToastMessage } from "./utils/toast";
 
   type CompactMetric = [label: string, value: string | number | null | undefined];
@@ -29,7 +31,9 @@
   let timeStatusError: string | null = null;
   let disconnecting = false;
   let startingDaemon = false;
+  let rebooting = false;
   let updatePanelOpen = false;
+  let rebootConfirmOpen = false;
   let statusPollTimer: number | undefined;
   let diagnosticSocket: WebSocket | undefined;
   let diagnosticReconnectTimer: number | undefined;
@@ -338,7 +342,29 @@
     }
   }
 
+  async function rebootDevice() {
+    rebooting = true;
+    try {
+      const result = await api.rebootSystem();
+      if (result.success) {
+        rebootConfirmOpen = false;
+        showToast("设备正在重启", "success");
+      } else {
+        showToast(result.message ?? "重启设备失败", "error");
+      }
+    } catch {
+      showToast("重启请求失败", "error");
+    } finally {
+      rebooting = false;
+    }
+  }
+
   function handleUpdatePanelKeydown(event: KeyboardEvent) {
+    if (rebootConfirmOpen && event.key === "Escape" && !rebooting) {
+      rebootConfirmOpen = false;
+      return;
+    }
+
     if (updatePanelOpen && event.key === "Escape") {
       updatePanelOpen = false;
     }
@@ -349,9 +375,12 @@
 <svelte:window onkeydown={handleUpdatePanelKeydown} />
 
 <main class="liquid-app min-h-screen overflow-hidden">
-  <div class="liquid-background" aria-hidden="true"></div>
+  <div class="liquid-background" class:modal-background-blurred={$modalOpen} aria-hidden="true"></div>
 
-  <div class="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-4 sm:gap-6 sm:px-6 sm:py-6 lg:px-8">
+  <div
+    class="app-content mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-4 sm:gap-6 sm:px-6 sm:py-6 lg:px-8"
+    class:modal-background-blurred={$modalOpen}
+  >
     <header class="glass-panel sticky top-3 z-30 px-4 py-4 sm:px-5">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex items-center gap-3">
@@ -364,7 +393,7 @@
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Badge color="blue" class="glass-badge w-fit">版本 {systemVersion}</Badge>
+          <span class="version-label w-fit">版本 {systemVersion}</span>
           <Button
             color="alternative"
             size="sm"
@@ -373,6 +402,17 @@
           >
             <RefreshCw size={15} class="mr-2" />
             更新
+          </Button>
+          <Button
+            color="alternative"
+            size="sm"
+            class="glass-button glass-button--danger"
+            loading={rebooting}
+            disabled={rebooting}
+            onclick={() => (rebootConfirmOpen = true)}
+          >
+            <Power size={15} class="mr-2" />
+            重启设备
           </Button>
         </div>
       </div>
@@ -525,23 +565,20 @@
   </div>
 
   {#if updatePanelOpen}
-    <div class="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto px-4 py-6 sm:py-10">
-      <button
-        type="button"
-        class="glass-modal-backdrop"
-        aria-label="关闭更新面板"
-        onclick={() => (updatePanelOpen = false)}
-        transition:fade={{ duration: 180 }}
-      ></button>
+    <ModalLayer closeLabel="关闭更新面板" onClose={() => (updatePanelOpen = false)}>
       <div
-        class="glass-dialog-panel glass-dialog-panel--wide"
+        class="glass-card glass-dialog-panel glass-dialog-panel--wide"
         role="dialog"
         aria-modal="true"
-        aria-label="控制台更新"
+        aria-labelledby="update-panel-title"
         tabindex="-1"
         transition:scale={{ duration: 220, start: 0.96, opacity: 0 }}
       >
-        <div class="mb-2 flex justify-end">
+        <div class="relative flex items-start justify-between gap-4 border-b border-white/35 px-5 py-4 dark:border-white/10">
+          <div class="min-w-0">
+            <h2 id="update-panel-title" class="text-lg font-semibold tracking-normal text-slate-950 dark:text-white">控制台更新</h2>
+            <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">从 GitHub Release 获取控制台程序包</p>
+          </div>
           <button
             type="button"
             class="glass-icon-button"
@@ -553,7 +590,48 @@
         </div>
         <UpdateTab on:toast={(event) => showToast(event.detail.text, event.detail.kind)} />
       </div>
-    </div>
+    </ModalLayer>
+  {/if}
+
+  {#if rebootConfirmOpen}
+    <ModalLayer closeLabel="关闭重启确认窗口" disabled={rebooting} onClose={() => (rebootConfirmOpen = false)}>
+      <div
+        class="glass-card glass-dialog-panel glass-dialog-panel--compact"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reboot-confirm-title"
+        tabindex="-1"
+        transition:scale={{ duration: 220, start: 0.96, opacity: 0 }}
+      >
+        <div class="relative flex items-start justify-between gap-4 border-b border-white/35 px-5 py-4 dark:border-white/10">
+          <div class="min-w-0">
+            <h2 id="reboot-confirm-title" class="text-lg font-semibold tracking-normal text-slate-950 dark:text-white">重启设备</h2>
+            <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">设备会立即断开连接并重新启动</p>
+          </div>
+          <button
+            type="button"
+            class="glass-icon-button"
+            aria-label="关闭重启确认窗口"
+            disabled={rebooting}
+            onclick={() => (rebootConfirmOpen = false)}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div class="relative p-5">
+          <p class="text-sm leading-6 text-slate-700 dark:text-slate-200">确认现在重启设备？</p>
+        </div>
+
+        <div class="relative flex flex-col-reverse gap-3 border-t border-white/35 px-5 py-4 sm:flex-row sm:justify-end dark:border-white/10">
+          <Button class="glass-button" color="alternative" disabled={rebooting} onclick={() => (rebootConfirmOpen = false)}>取消</Button>
+          <Button class="glass-button glass-button--danger" color="alternative" loading={rebooting} disabled={rebooting} onclick={rebootDevice}>
+            <Power size={16} class="mr-2" />
+            重启设备
+          </Button>
+        </div>
+      </div>
+    </ModalLayer>
   {/if}
 
   {#if toasts.length > 0}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
-  import { Button, Card } from "flowbite-svelte";
+  import { Button } from "flowbite-svelte";
   import { Download, RefreshCw } from "@lucide/svelte";
   import DetailRows from "../components/DetailRows.svelte";
   import { api } from "../api/client";
@@ -56,7 +56,7 @@
 
   function renderApplyResult(result: ApplyUpdateResult) {
     title = "更新完成";
-    summary = `已从 v${result.previous_version} 更新到 v${result.updated_version}，请重启服务后生效。`;
+    summary = `已从 v${result.previous_version} 更新到 v${result.updated_version}，请重启设备生效。`;
     details = [
       ["目标平台", result.target],
       ["更新包", result.asset_name],
@@ -101,7 +101,7 @@
       const result = await api.applyUpdate();
       if (result.success && result.data) {
         renderApplyResult(result.data);
-        notify("更新完成，请重启服务", "success");
+        notify("更新完成，请重启设备生效", "success");
       } else {
         title = "更新失败";
         summary = result.message ?? "下载或安装更新失败";
@@ -115,33 +115,27 @@
       applying = false;
     }
   }
+
 </script>
 
-<Card class="glass-card max-w-none" size="xl">
-  <div class="flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between">
-    <div>
-      <h2 class="text-xl font-semibold tracking-normal text-slate-950 dark:text-white">控制台更新</h2>
-      <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">从 GitHub Release 获取控制台程序包</p>
-    </div>
-    <div class="grid gap-3 sm:flex sm:flex-wrap">
-      <Button class="glass-button" color="alternative" loading={checking} disabled={checking || applying} onclick={checkUpdate}>
-        <RefreshCw size={16} class="mr-2" />
-        检查更新
-      </Button>
-      <Button class="glass-button glass-button--primary" color="alternative" loading={applying} disabled={!canApply} onclick={applyUpdate}>
-        <Download size={16} class="mr-2" />
-        立即更新
-      </Button>
-    </div>
+<div class="relative space-y-5 p-5">
+  <div class="glass-lens p-4">
+    <h3 class="relative text-lg font-semibold tracking-normal text-slate-950 dark:text-white">{title}</h3>
+    <p class="relative mt-1 text-sm text-slate-700 dark:text-slate-200">{summary}</p>
   </div>
 
-  <div class="px-5 pb-5">
-    <div class="glass-lens mb-4 p-4">
-      <h3 class="relative text-lg font-semibold tracking-normal text-slate-950 dark:text-white">{title}</h3>
-      <p class="relative mt-1 text-sm text-slate-700 dark:text-slate-200">{summary}</p>
-    </div>
-    {#if details.length > 0}
-      <DetailRows rows={details} />
-    {/if}
-  </div>
-</Card>
+  {#if details.length > 0}
+    <DetailRows rows={details} />
+  {/if}
+</div>
+
+<div class="relative flex flex-col-reverse gap-3 border-t border-white/35 px-5 py-4 sm:flex-row sm:justify-end dark:border-white/10">
+  <Button class="glass-button" color="alternative" loading={checking} disabled={checking || applying} onclick={checkUpdate}>
+    <RefreshCw size={16} class="mr-2" />
+    检查更新
+  </Button>
+  <Button class="glass-button glass-button--primary" color="alternative" loading={applying} disabled={!canApply} onclick={applyUpdate}>
+    <Download size={16} class="mr-2" />
+    立即更新
+  </Button>
+</div>

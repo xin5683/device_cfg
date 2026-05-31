@@ -3,16 +3,18 @@ use std::{env, net::SocketAddr, path::PathBuf, time::SystemTime};
 use tokio::{
     net::UdpSocket,
     process::Command,
-    time::{Duration, timeout},
+    time::{Duration, sleep, timeout},
 };
 
 const DEFAULT_CAN_IFACE: &str = "can0";
 const DEFAULT_CANBUSLOAD_BIN: &str = "canbusload";
 const DEFAULT_NTP_SERVER: &str = "pool.ntp.org";
 const DEFAULT_NTPD_BIN: &str = "ntpd";
+const DEFAULT_REBOOT_BIN: &str = "reboot";
 const NTP_UNIX_EPOCH_OFFSET: u64 = 2_208_988_800;
 const NTP_QUERY_TIMEOUT: Duration = Duration::from_secs(4);
 const NTP_SYNC_TIMEOUT: Duration = Duration::from_secs(20);
+const REBOOT_DELAY: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
 pub struct SystemDiagnosticConfig {
@@ -21,6 +23,7 @@ pub struct SystemDiagnosticConfig {
     can_bitrate: Option<u64>,
     ntp_server: String,
     ntpd_bin: String,
+    reboot_bin: String,
 }
 
 impl SystemDiagnosticConfig {
@@ -34,6 +37,7 @@ impl SystemDiagnosticConfig {
                 .and_then(|value| value.parse::<u64>().ok()),
             ntp_server: env::var("NTP_SERVER").unwrap_or_else(|_| DEFAULT_NTP_SERVER.to_string()),
             ntpd_bin: env::var("NTPD_BIN").unwrap_or_else(|_| DEFAULT_NTPD_BIN.to_string()),
+            reboot_bin: env::var("REBOOT_BIN").unwrap_or_else(|_| DEFAULT_REBOOT_BIN.to_string()),
         }
     }
 }
@@ -90,6 +94,12 @@ pub struct TimeSyncResult {
     pub output: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct RebootResult {
+    pub scheduled: bool,
+    pub delay_seconds: u64,
+}
+
 pub struct SystemDiagnosticService {
     config: SystemDiagnosticConfig,
 }
@@ -101,12 +111,13 @@ impl SystemDiagnosticService {
 
     pub fn print_config(&self) {
         println!(
-            "诊断配置: can_iface={}, canbusload_bin={}, can_bitrate={:?}, ntp_server={}, ntpd_bin={}",
+            "诊断配置: can_iface={}, canbusload_bin={}, can_bitrate={:?}, ntp_server={}, ntpd_bin={}, reboot_bin={}",
             self.config.can_iface,
             self.config.canbusload_bin,
             self.config.can_bitrate,
             self.config.ntp_server,
-            self.config.ntpd_bin
+            self.config.ntpd_bin,
+            self.config.reboot_bin
         );
     }
 
@@ -258,6 +269,21 @@ impl SystemDiagnosticService {
                 text.trim()
             )))
         }
+    }
+
+    pub async fn reboot(&self) -> Result<RebootResult> {
+        let reboot_bin = self.config.reboot_bin.clone();
+        tokio::spawn(async move {
+            sleep(REBOOT_DELAY).await;
+            if let Err(err) = Command::new(&reboot_bin).status().await {
+                eprintln!("设备重启命令执行失败: {}", err);
+            }
+        });
+
+        Ok(RebootResult {
+            scheduled: true,
+            delay_seconds: REBOOT_DELAY.as_secs(),
+        })
     }
 }
 

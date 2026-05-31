@@ -55,6 +55,7 @@ pub async fn run() {
         .route("/favicon.svg", get(assets::favicon_svg))
         .route("/favicon.ico", get(assets::favicon_ico))
         .route("/api/system/info", get(api::system_info_handler))
+        .route("/api/system/reboot", post(api::system_reboot_handler))
         .route("/api/scan", get(api::scan_handler))
         .route("/api/status", get(api::status_handler))
         .route("/api/connect", post(api::connect_handler))

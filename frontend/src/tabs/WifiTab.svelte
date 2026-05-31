@@ -1,8 +1,9 @@
 <script lang="ts">
   import { createEventDispatcher, tick } from "svelte";
-  import { fade, scale } from "svelte/transition";
+  import { scale } from "svelte/transition";
   import { Button, Card, Input, Label } from "flowbite-svelte";
   import { Lock, LockOpen, Search, WifiOff, X } from "@lucide/svelte";
+  import ModalLayer from "../components/ModalLayer.svelte";
   import SignalBars from "../components/SignalBars.svelte";
   import { api } from "../api/client";
   import type { NetworkInfo } from "../api/types";
@@ -26,6 +27,10 @@
 
   function notify(text: string, kind: ToastKind) {
     dispatch("toast", { text, kind });
+  }
+
+  function setConnectOpen(open: boolean) {
+    connectOpen = open;
   }
 
   async function scan() {
@@ -52,14 +57,14 @@
   async function openConnect(network: NetworkInfo) {
     selectedNetwork = network;
     password = "";
-    connectOpen = true;
+    setConnectOpen(true);
     await tick();
     document.getElementById("wifi-password-input")?.focus();
   }
 
   function closeConnect() {
     if (connecting) return;
-    connectOpen = false;
+    setConnectOpen(false);
   }
 
   function handleConnectKeydown(event: KeyboardEvent) {
@@ -82,7 +87,7 @@
 
     try {
       const result = await api.connectWifi(body);
-      connectOpen = false;
+      setConnectOpen(false);
 
       if (result.success) {
         notify(`连接成功！IP: ${result.data ?? ""}`, "success");
@@ -91,7 +96,7 @@
         notify(`连接失败: ${result.message ?? "未知错误"}`, "error");
       }
     } catch {
-      connectOpen = false;
+      setConnectOpen(false);
       notify("连接请求失败", "error");
     } finally {
       connecting = false;
@@ -148,15 +153,7 @@
 </Card>
 
 {#if connectOpen}
-  <div class="glass-modal fixed inset-0 z-40 flex items-center justify-center px-4 py-6">
-    <button
-      type="button"
-      class="glass-modal-backdrop"
-      aria-label="关闭连接窗口"
-      onclick={closeConnect}
-      transition:fade={{ duration: 180 }}
-    ></button>
-
+  <ModalLayer closeLabel="关闭连接窗口" onClose={closeConnect}>
     <div
       class="glass-card glass-dialog-panel glass-dialog-panel--compact"
       role="dialog"
@@ -217,5 +214,5 @@
         <Button class="glass-button glass-button--primary" color="alternative" loading={connecting} disabled={connecting} onclick={connect}>连接</Button>
       </div>
     </div>
-  </div>
+  </ModalLayer>
 {/if}

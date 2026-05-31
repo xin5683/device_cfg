@@ -23,6 +23,11 @@ export type SystemInfo = {
   version: string;
 };
 
+export type RebootResult = {
+  scheduled: boolean;
+  delay_seconds: number;
+};
+
 export type ConnectRequest = {
   ssid: string;
   password?: string;
