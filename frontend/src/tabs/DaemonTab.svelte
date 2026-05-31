@@ -2,7 +2,7 @@
   import { createEventDispatcher, onDestroy, onMount, tick } from "svelte";
   import { AnsiUp } from "ansi_up";
   import { Button, Card } from "flowbite-svelte";
-  import { Download, FileText, Play, RefreshCw, RotateCw, Upload } from "@lucide/svelte";
+  import { Play, RefreshCw, RotateCw, Upload } from "@lucide/svelte";
   import DetailRows from "../components/DetailRows.svelte";
   import { api } from "../api/client";
   import type { DaemonInstallResult, DaemonStatus, DaemonUpdateInfo } from "../api/types";
@@ -24,14 +24,16 @@
   let details: DetailRow[] = [];
   let logsText = "";
   let logsHtml = "暂无日志";
-  let busyAction: "check" | "pull" | "upgrade" | "start" | "restart" | "auto-start" | null = null;
+  let busyAction: "check" | "install" | "start" | "restart" | "auto-start" | null = null;
   let status: DaemonStatus | null = null;
-  let canUpgrade = false;
+  let canInstall = false;
+  let installButtonLabel = "升级";
   let logSocket: WebSocket | undefined;
   let reconnectTimer: number | undefined;
   let autoStart = false;
   let logViewport: HTMLPreElement | undefined;
   let followLatestLogs = true;
+  let loadingInitialLogs = false;
 
   $: if (active) {
     startLogStream();
@@ -60,7 +62,7 @@
       ? "守护进程正在运行。"
       : nextStatus.installed
         ? "守护进程已安装，可以启动。"
-        : "守护进程尚未安装，请先拉取 release 包。";
+        : "守护进程尚未安装，请先升级安装 release 包。";
     details = [
       ["运行状态", stateText],
       ["PID", nextStatus.pid],
@@ -93,21 +95,25 @@
     const installed = info.installed_version ? `v${info.installed_version}` : "未安装";
 
     if (info.update_available && info.asset_name && info.sha256) {
-      title = info.installed_version ? "发现新版本" : "可拉取程序";
+      title = info.installed_version ? "发现新版本" : "可升级安装";
       summary = `${installed}，最新 v${info.latest_version}。`;
-      canUpgrade = !!info.installed_version;
+      installButtonLabel = "升级";
+      canInstall = true;
     } else if (info.update_available && !info.asset_name) {
       title = "无匹配架构包";
       summary = `最新版本 v${info.latest_version} 没有匹配 ${info.target} 的 release asset。`;
-      canUpgrade = false;
+      installButtonLabel = "升级";
+      canInstall = false;
     } else if (info.update_available && !info.sha256) {
       title = "缺少校验摘要";
       summary = `最新版本 v${info.latest_version} 未提供 GitHub sha256 digest。`;
-      canUpgrade = false;
+      installButtonLabel = "升级";
+      canInstall = false;
     } else {
       title = "已是最新版本";
       summary = `当前 ${installed} 与最新 release 一致。`;
-      canUpgrade = false;
+      installButtonLabel = "强制升级";
+      canInstall = !!info.asset_name && !!info.sha256;
     }
 
     details = [
@@ -124,6 +130,7 @@
   function renderInstallResult(result: DaemonInstallResult) {
     title = "安装完成";
     summary = `已安装 v${result.installed_version}。`;
+    canInstall = false;
     details = [
       ["上一版本", result.previous_version ? `v${result.previous_version}` : "-"],
       ["安装版本", `v${result.installed_version}`],
@@ -137,7 +144,7 @@
 
   async function checkDaemon() {
     busyAction = "check";
-    canUpgrade = false;
+    canInstall = false;
     title = "正在检查";
     summary = "正在通过镜像站请求 GitHub Release 信息。";
 
@@ -159,13 +166,13 @@
     }
   }
 
-  async function installDaemon(mode: "pull" | "upgrade") {
-    busyAction = mode;
-    title = mode === "pull" ? "拉取中" : "升级中";
+  async function installDaemon() {
+    busyAction = "install";
+    title = installButtonLabel === "强制升级" ? "强制升级中" : "升级中";
     summary = "正在下载、校验并安装守护进程。";
 
     try {
-      const result = mode === "pull" ? await api.pullDaemon() : await api.upgradeDaemon();
+      const result = await api.pullDaemon();
       if (result.success && result.data) {
         renderInstallResult(result.data);
         notify("UDP 网关安装完成", "success");
@@ -209,13 +216,13 @@
       const result = await api.restartDaemon();
       if (result.success) {
         resetLogView();
-        notify("UDP 网关已重启", "success");
+        notify("UDP 网关进程已重启", "success");
         await loadStatus();
       } else {
-        notify(`UDP 网关重启失败: ${result.message ?? "未知错误"}`, "error");
+        notify(`UDP 网关进程重启失败: ${result.message ?? "未知错误"}`, "error");
       }
     } catch {
-      notify("UDP 网关重启请求失败", "error");
+      notify("UDP 网关进程重启请求失败", "error");
     } finally {
       busyAction = null;
       await loadStatus();
@@ -246,9 +253,32 @@
 
   export function loadLogs() {
     followLatestLogs = true;
+    void loadInitialLogs();
     scrollLogsToBottom();
     if (!logSocket || logSocket.readyState > WebSocket.OPEN) {
       startLogStream();
+    }
+  }
+
+  async function loadInitialLogs() {
+    if (loadingInitialLogs) return;
+    loadingInitialLogs = true;
+
+    try {
+      const result = await api.daemonLogs();
+      if (result.success && result.data) {
+        const text = result.data.lines.length > 0 ? `${result.data.lines.join("\n")}\n` : "暂无日志";
+        logsText = result.data.lines.length > 0 ? text : "";
+        await renderLogText(text, true);
+      } else if (!logsText) {
+        await renderLogText(result.message ? `日志读取失败: ${result.message}` : "暂无日志", true);
+      }
+    } catch {
+      if (!logsText) {
+        await renderLogText("日志读取失败: 服务未响应", true);
+      }
+    } finally {
+      loadingInitialLogs = false;
     }
   }
 
@@ -300,6 +330,7 @@
   function startLogStream() {
     if (logSocket || reconnectTimer) return;
     void loadStatus();
+    void loadInitialLogs();
     logSocket = new WebSocket(api.daemonLogsWsUrl());
 
     logSocket.onmessage = (event) => {
@@ -363,25 +394,17 @@
         <RefreshCw size={16} class="mr-2" />
         检查
       </Button>
-      <Button class="glass-button" color="alternative" loading={busyAction === "pull"} disabled={!!busyAction} onclick={() => installDaemon("pull")}>
-        <Download size={16} class="mr-2" />
-        拉取
-      </Button>
-      <Button class="glass-button glass-button--primary" color="alternative" loading={busyAction === "upgrade"} disabled={!!busyAction || !canUpgrade} onclick={() => installDaemon("upgrade")}>
+      <Button class="glass-button glass-button--primary" color="alternative" loading={busyAction === "install"} disabled={!!busyAction || !canInstall} onclick={installDaemon}>
         <Upload size={16} class="mr-2" />
-        升级
+        {installButtonLabel}
       </Button>
       <Button class="glass-button glass-button--success" color="alternative" loading={busyAction === "start"} disabled={!!busyAction || !status?.installed || !!status?.running} onclick={startDaemon}>
         <Play size={16} class="mr-2" />
         启动
       </Button>
-      <Button class="glass-button" color="alternative" loading={busyAction === "restart"} disabled={!!busyAction || !status?.installed || !status?.running} onclick={restartDaemon}>
+      <Button class="glass-button glass-button--warning" color="alternative" loading={busyAction === "restart"} disabled={!!busyAction || !status?.installed || !status?.running} onclick={restartDaemon}>
         <RotateCw size={16} class="mr-2" />
-        重启
-      </Button>
-      <Button class="glass-button" color="alternative" disabled={!!busyAction} onclick={loadLogs}>
-        <FileText size={16} class="mr-2" />
-        日志
+        重启进程
       </Button>
     </div>
   </div>

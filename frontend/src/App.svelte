@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import { scale } from "svelte/transition";
   import { Button, Tabs, TabItem, Toast } from "flowbite-svelte";
-  import { Activity, EthernetPort, FileText, Power, Radio, RefreshCw, Server, Wifi, X } from "@lucide/svelte";
+  import { Activity, EthernetPort, Power, Radio, RefreshCw, Server, Wifi, X } from "@lucide/svelte";
   import CompactStatusCard from "./components/CompactStatusCard.svelte";
   import ModalLayer from "./components/ModalLayer.svelte";
   import StatusCard from "./components/StatusCard.svelte";
@@ -40,6 +40,7 @@
   let diagnosticReconnectTimer: number | undefined;
   let toastId = 0;
   let toasts: ToastMessage[] = [];
+  const toastDismissMs = 5000;
 
   $: wifiConnected = wifiStatus?.state === "COMPLETED";
   $: wifiStateText = wifiStatusError
@@ -180,7 +181,7 @@
     toasts = [...toasts, { id, text, kind }];
     window.setTimeout(() => {
       toasts = toasts.filter((toast) => toast.id !== id);
-    }, 3000);
+    }, toastDismissMs);
   }
 
   onMount(() => {
@@ -390,7 +391,7 @@
             ? `PID ${daemonStatus.pid}`
             : daemonStatus?.installed
               ? "可启动"
-              : "请先拉取程序")}
+              : "请先升级安装")}
         stateText={daemonStateText}
         stateTone={daemonStatus?.running ? "connected" : daemonStatus ? "disconnected" : "loading"}
         rows={daemonRows}
@@ -485,11 +486,6 @@
           {/snippet}
         </TabItem>
 
-        <TabItem key="logs" disabled>
-          {#snippet titleSlot()}
-            <span class="inline-flex items-center gap-2"><FileText size={18} />系统日志</span>
-          {/snippet}
-        </TabItem>
       </Tabs>
 
       <div class="glass-tab-panels">
@@ -627,10 +623,14 @@
   {/if}
 
   {#if toasts.length > 0}
-    <div class="fixed right-4 top-4 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3">
+    <div class="pointer-events-none fixed inset-x-0 top-5 z-50 flex justify-center px-4">
+      <div class="flex w-[min(30rem,calc(100vw-2rem))] flex-col items-stretch gap-3">
       {#each toasts as message (message.id)}
-        <Toast color={toastColor(message.kind)} class="glass-panel">{message.text}</Toast>
+        <div in:scale={{ duration: 320, start: 0.94, opacity: 0 }} out:scale={{ duration: 850, start: 0.98, opacity: 0 }}>
+          <Toast color={toastColor(message.kind)} class="glass-panel central-toast pointer-events-auto">{message.text}</Toast>
+        </div>
       {/each}
+      </div>
     </div>
   {/if}
 </main>
