@@ -25,7 +25,10 @@ use tokio::{
 
 use crate::{
     app::AppState,
-    device::system::{CanStatus, TimeStatus},
+    device::{
+        ethernet::{EthernetSettings, EthernetStatus},
+        system::{CanStatus, TimeStatus},
+    },
 };
 
 const LOG_WS_POLL_INTERVAL: Duration = Duration::from_millis(200);
@@ -123,6 +126,7 @@ pub struct DaemonAutoStartRequest {
 pub struct DiagnosticStatus {
     pub can: CanStatus,
     pub time: TimeStatus,
+    pub ethernet: EthernetStatus,
 }
 
 pub async fn system_info_handler() -> impl IntoResponse {
@@ -188,6 +192,30 @@ pub async fn connect_handler(
 pub async fn disconnect_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.wifi.disconnect().await {
         Ok(()) => ApiResponse::ok("已断开连接").into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn ethernet_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.ethernet.status().await {
+        Ok(status) => ApiResponse::ok(status).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn ethernet_config_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.ethernet.read_config().await {
+        Ok(config) => ApiResponse::ok(config).into_response(),
+        Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
+    }
+}
+
+pub async fn ethernet_apply_handler(
+    State(state): State<AppState>,
+    Json(req): Json<EthernetSettings>,
+) -> impl IntoResponse {
+    match state.ethernet.apply_config(req).await {
+        Ok(result) => ApiResponse::ok(result).into_response(),
         Err(e) => ApiResponse::<()>::err(e.to_string()).into_response(),
     }
 }
@@ -402,9 +430,22 @@ async fn stream_diagnostic_status(socket: WebSocket, state: AppState) {
                 };
                 tick_count += 1;
 
+                let ethernet = match state.ethernet.status().await {
+                    Ok(status) => status,
+                    Err(err) => {
+                        if send_diagnostic_error(&mut sender, err.to_string())
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                        continue;
+                    }
+                };
+
                 let payload = ApiResponse {
                     success: true,
-                    data: Some(DiagnosticStatus { can, time }),
+                    data: Some(DiagnosticStatus { can, time, ethernet }),
                     message: None,
                 };
 

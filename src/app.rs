@@ -9,6 +9,7 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::{
     device::{
         daemon::{DaemonConfig, DaemonService},
+        ethernet::{EthernetConfig, EthernetService},
         system::{SystemDiagnosticConfig, SystemDiagnosticService},
         update::{UpdateConfig, UpdateService},
         wifi::{WifiConfig, WifiService},
@@ -19,6 +20,7 @@ use crate::{
 #[derive(Clone)]
 pub struct AppState {
     pub wifi: Arc<WifiService>,
+    pub ethernet: Arc<EthernetService>,
     pub update: Arc<UpdateService>,
     pub daemon: Arc<DaemonService>,
     pub system: Arc<SystemDiagnosticService>,
@@ -27,6 +29,7 @@ pub struct AppState {
 pub async fn run() {
     let config = AppConfig::from_env();
     let wifi = Arc::new(WifiService::new(WifiConfig::from_env()));
+    let ethernet = Arc::new(EthernetService::new(EthernetConfig::from_env()));
     let update = Arc::new(UpdateService::new(UpdateConfig::from_env()));
     let daemon = Arc::new(DaemonService::new(DaemonConfig::from_env()));
     let system = Arc::new(SystemDiagnosticService::new(
@@ -34,12 +37,14 @@ pub async fn run() {
     ));
     let state = AppState {
         wifi,
+        ethernet,
         update,
         daemon,
         system,
     };
 
     state.wifi.print_config();
+    state.ethernet.print_config();
     state.update.print_config();
     state.daemon.print_config();
     state.system.print_config();
@@ -60,6 +65,11 @@ pub async fn run() {
         .route("/api/status", get(api::status_handler))
         .route("/api/connect", post(api::connect_handler))
         .route("/api/disconnect", post(api::disconnect_handler))
+        .route("/api/ethernet/status", get(api::ethernet_status_handler))
+        .route(
+            "/api/ethernet/config",
+            get(api::ethernet_config_handler).post(api::ethernet_apply_handler),
+        )
         .route("/api/update/check", get(api::update_check_handler))
         .route("/api/update/apply", post(api::update_apply_handler))
         .route("/api/daemon/status", get(api::daemon_status_handler))

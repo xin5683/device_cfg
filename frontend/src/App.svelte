@@ -2,18 +2,19 @@
   import { onDestroy, onMount } from "svelte";
   import { scale } from "svelte/transition";
   import { Button, Tabs, TabItem, Toast } from "flowbite-svelte";
-  import { Activity, FileText, Power, Radio, RefreshCw, Server, Wifi, X } from "@lucide/svelte";
+  import { Activity, EthernetPort, FileText, Power, Radio, RefreshCw, Server, Wifi, X } from "@lucide/svelte";
   import CompactStatusCard from "./components/CompactStatusCard.svelte";
   import ModalLayer from "./components/ModalLayer.svelte";
   import StatusCard from "./components/StatusCard.svelte";
   import WifiTab from "./tabs/WifiTab.svelte";
+  import EthernetTab from "./tabs/EthernetTab.svelte";
   import UpdateTab from "./tabs/UpdateTab.svelte";
   import DaemonTab from "./tabs/DaemonTab.svelte";
   import DiagnosticTab from "./tabs/DiagnosticTab.svelte";
   import { api } from "./api/client";
-  import type { ApiResponse, CanStatus, DaemonStatus, DiagnosticStatus, TimeStatus, WifiStatus } from "./api/types";
+  import type { ApiResponse, CanStatus, DaemonStatus, DiagnosticStatus, EthernetStatus, TimeStatus, WifiStatus } from "./api/types";
   import type { DetailRow } from "./utils/format";
-  import { compactTarget, stateLabel, statusDescription } from "./utils/format";
+  import { stateLabel, statusDescription } from "./utils/format";
   import { modalOpen } from "./utils/modal";
   import type { ToastKind, ToastMessage } from "./utils/toast";
 
@@ -27,10 +28,10 @@
   let daemonStatusError: string | null = null;
   let canStatus: CanStatus | null = null;
   let canStatusError: string | null = null;
+  let ethernetStatus: EthernetStatus | null = null;
+  let ethernetStatusError: string | null = null;
   let timeStatus: TimeStatus | null = null;
   let timeStatusError: string | null = null;
-  let disconnecting = false;
-  let startingDaemon = false;
   let rebooting = false;
   let updatePanelOpen = false;
   let rebootConfirmOpen = false;
@@ -48,7 +49,7 @@
         ? "已连接"
         : stateLabel(wifiStatus.state)
       : "加载中";
-  $: wifiRows = buildWifiRows(wifiStatus, wifiConnected);
+  $: wifiMetrics = buildWifiMetrics(wifiStatus, wifiConnected);
   $: daemonStateText = daemonStatusError
     ? "不可用"
     : daemonStatus
@@ -68,8 +69,19 @@
           ? "未启用"
           : "不存在"
       : "加载中";
-  $: canRows = buildCanRows(canStatus);
   $: canMetrics = buildCanMetrics(canStatus);
+  $: ethernetStateText = ethernetStatusError
+    ? "不可用"
+    : ethernetStatus
+      ? ethernetStatus.up
+        ? ethernetStatus.carrier === true
+          ? "已启用"
+          : "未接入"
+        : ethernetStatus.exists
+          ? "未启用"
+          : "不存在"
+      : "加载中";
+  $: ethernetMetrics = buildEthernetMetrics(ethernetStatus);
   $: timeStateText = timeStatusError
     ? "不可用"
     : timeStatus
@@ -77,61 +89,22 @@
         ? "已连接"
         : "无互联网"
       : "加载中";
-  $: timeRows = buildTimeRows(timeStatus);
   $: timeMetrics = buildTimeMetrics(timeStatus);
 
-  onMount(() => {
-    void loadSystemInfo();
-    void loadWifiStatus();
-    void loadDaemonStatus();
-    startDiagnosticStream();
-  });
-
-  onDestroy(() => {
-    if (statusPollTimer) {
-      window.clearInterval(statusPollTimer);
-    }
-    stopDiagnosticStream();
-  });
-
-  function buildWifiRows(status: WifiStatus | null, connected: boolean): DetailRow[] {
-    if (!status) {
-      return [
-        ["网络名称", "-"],
-        ["IP 地址", "-"],
-        ["BSSID", "-"]
-      ];
-    }
-
-    const rows: DetailRow[] = [
-      ["网络名称", connected && status.ssid ? status.ssid : "未连接"],
-      ["IP 地址", connected && status.ip ? status.ip : "-"],
-      ["BSSID", connected && status.bssid ? status.bssid : "-"]
+  function buildWifiMetrics(status: WifiStatus | null, connected: boolean): CompactMetric[] {
+    return [
+      ["网络", connected && status?.ssid ? status.ssid : "未连接"],
+      ["IP", connected && status?.ip ? status.ip : "-"],
+      ["BSSID", connected && status?.bssid ? status.bssid : "-"],
+      ["阶段", status?.state && status.state !== "DISCONNECTED" ? stateLabel(status.state) : "-"]
     ];
-
-    if (!connected && status.state && status.state !== "DISCONNECTED") {
-      rows.push(["连接阶段", status.state]);
-    }
-
-    return rows;
   }
 
   function buildDaemonRows(status: DaemonStatus | null): DetailRow[] {
     return [
       ["安装版本", status?.installed_version ? `v${status.installed_version}` : "-"],
       ["PID", status?.pid],
-      ["自启动", status ? (status.auto_start ? "已开启" : "已关闭") : "-"],
-      ["目标架构", compactTarget(status?.target)]
-    ];
-  }
-
-  function buildCanRows(status: CanStatus | null): DetailRow[] {
-    return [
-      ["接口状态", status ? (status.exists ? status.operstate : "未发现接口") : "-"],
-      ["RX packets", status?.rx_packets],
-      ["TX packets", status?.tx_packets],
-      ["RX errors", status?.rx_errors],
-      ["TX errors", status?.tx_errors]
+      ["自启动", status ? (status.auto_start ? "已开启" : "已关闭") : "-"]
     ];
   }
 
@@ -142,6 +115,23 @@
       ["RX/TX", status ? `${formatCanCount(status.rx_packets)}/${formatCanCount(status.tx_packets)}` : "-"],
       ["错误", status ? `${formatCanCount(status.rx_errors)}/${formatCanCount(status.tx_errors)}` : "-"]
     ];
+  }
+
+  function buildEthernetMetrics(status: EthernetStatus | null): CompactMetric[] {
+    const linkActive = status?.exists === true && status.carrier === true;
+
+    return [
+      ["Link", status ? (linkActive ? "已连接" : "未连接") : "-"],
+      ["IP", linkActive ? status?.primary_ipv4 : null],
+      ["方式", formatEthernetMode(status?.config_mode)],
+      ["网关", linkActive ? status?.gateway : null]
+    ];
+  }
+
+  function formatEthernetMode(mode: string | null | undefined) {
+    if (mode === "dhcp") return "DHCP";
+    if (mode === "static") return "静态地址";
+    return "-";
   }
 
   function formatCanCount(value: number | null | undefined) {
@@ -170,15 +160,6 @@
     return `${bitrate}`;
   }
 
-  function buildTimeRows(status: TimeStatus | null): DetailRow[] {
-    return [
-      ["板卡时间", status?.board_time],
-      ["互联网时间", status?.internet_time],
-      ["NTP 服务器", status?.ntp_server],
-      ["连接状态", status ? (status.internet_connected ? "互联网可用" : "互联网不可用") : "-"]
-    ];
-  }
-
   function buildTimeMetrics(status: TimeStatus | null): CompactMetric[] {
     return [
       ["板卡时间", status?.board_time],
@@ -201,6 +182,20 @@
       toasts = toasts.filter((toast) => toast.id !== id);
     }, 3000);
   }
+
+  onMount(() => {
+    void loadSystemInfo();
+    void loadWifiStatus();
+    void loadDaemonStatus();
+    startDiagnosticStream();
+  });
+
+  onDestroy(() => {
+    if (statusPollTimer) {
+      window.clearInterval(statusPollTimer);
+    }
+    stopDiagnosticStream();
+  });
 
   async function loadSystemInfo() {
     try {
@@ -252,16 +247,20 @@
         if (result.success && result.data) {
           canStatus = result.data.can;
           timeStatus = result.data.time;
+          ethernetStatus = result.data.ethernet;
           canStatusError = null;
           timeStatusError = null;
+          ethernetStatusError = null;
         } else {
           const message = result.message ?? "诊断状态推送异常";
           canStatusError = message;
           timeStatusError = message;
+          ethernetStatusError = message;
         }
       } catch {
         canStatusError = "诊断状态解析失败";
         timeStatusError = "诊断状态解析失败";
+        ethernetStatusError = "诊断状态解析失败";
       }
     };
 
@@ -303,43 +302,6 @@
         statusPollTimer = undefined;
       }
     }, 2000);
-  }
-
-  async function disconnectWifi() {
-    disconnecting = true;
-
-    try {
-      const result = await api.disconnectWifi();
-      if (result.success) {
-        showToast("已断开连接", "info");
-        await loadWifiStatus();
-      } else {
-        showToast(`断开失败: ${result.message ?? "未知错误"}`, "error");
-      }
-    } catch {
-      showToast("断开请求失败", "error");
-    } finally {
-      disconnecting = false;
-    }
-  }
-
-  async function startDaemon() {
-    startingDaemon = true;
-
-    try {
-      const result = await api.startDaemon();
-      if (result.success) {
-        showToast("UDP 网关已启动", "success");
-        await loadDaemonStatus();
-      } else {
-        showToast(`UDP 网关启动失败: ${result.message ?? "未知错误"}`, "error");
-      }
-    } catch {
-      showToast("UDP 网关启动请求失败", "error");
-    } finally {
-      startingDaemon = false;
-      await loadDaemonStatus();
-    }
   }
 
   async function rebootDevice() {
@@ -418,24 +380,7 @@
       </div>
     </header>
 
-    <section
-      class="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)] xl:items-start"
-      aria-label="状态卡片区域"
-    >
-      <StatusCard
-        title="WiFi 状态"
-        badge="wlan1"
-        summaryTitle="当前连接状态"
-        summary={wifiStatusError ?? statusDescription(wifiStatus?.state, wifiConnected)}
-        stateText={wifiStateText}
-        stateTone={wifiConnected ? "connected" : wifiStatus ? "disconnected" : "loading"}
-        rows={wifiRows}
-        actionLabel={wifiConnected ? "断开连接" : null}
-        actionColor="red"
-        actionLoading={disconnecting}
-        onAction={disconnectWifi}
-      />
-
+    <section class="grid gap-4" aria-label="状态卡片区域">
       <StatusCard
         title="UDP 网关"
         badge="XPlaneUDP"
@@ -449,13 +394,20 @@
         stateText={daemonStateText}
         stateTone={daemonStatus?.running ? "connected" : daemonStatus ? "disconnected" : "loading"}
         rows={daemonRows}
-        actionLabel={daemonStatus?.installed && !daemonStatus.running ? "启动" : null}
-        actionColor="primary"
-        actionLoading={startingDaemon}
-        onAction={startDaemon}
+        layout="horizontal"
       />
 
-      <div class="grid gap-4 md:col-span-2 md:grid-cols-2 xl:col-span-1 xl:grid-cols-1">
+      <div class="grid gap-4 lg:grid-cols-2">
+        <CompactStatusCard
+          title="WiFi 状态"
+          badge="wlan1"
+          summaryTitle="当前连接状态"
+          summary={wifiStatusError ?? statusDescription(wifiStatus?.state, wifiConnected)}
+          stateText={wifiStateText}
+          stateTone={wifiConnected ? "connected" : wifiStatus ? "disconnected" : "loading"}
+          metrics={wifiMetrics}
+        />
+
         <CompactStatusCard
           title="CAN 接口"
           badge={canStatus?.iface ?? "can0"}
@@ -469,6 +421,25 @@
           stateText={canStateText}
           stateTone={canStatus?.up ? "connected" : canStatus ? "disconnected" : "loading"}
           metrics={canMetrics}
+        />
+      </div>
+
+      <div class="grid gap-4 lg:grid-cols-2">
+        <CompactStatusCard
+          title="网口"
+          badge={ethernetStatus?.iface ?? "eth0"}
+          summaryTitle="eth0 状态"
+          summary={ethernetStatusError ??
+            (ethernetStatus
+              ? ethernetStatus.exists
+                ? ethernetStatus.carrier === true
+                  ? ethernetStatus.primary_ipv4 ?? "已接入，等待 IP"
+                  : "网线未接入"
+                : "未发现 eth0 接口"
+              : "正在读取网口状态")}
+          stateText={ethernetStateText}
+          stateTone={ethernetStatus?.up && ethernetStatus?.carrier === true ? "connected" : ethernetStatus ? "disconnected" : "loading"}
+          metrics={ethernetMetrics}
         />
 
         <CompactStatusCard
@@ -493,6 +464,12 @@
         <TabItem key="wifi">
           {#snippet titleSlot()}
             <span class="inline-flex items-center gap-2"><Wifi size={18} />无线网络</span>
+          {/snippet}
+        </TabItem>
+
+        <TabItem key="ethernet">
+          {#snippet titleSlot()}
+            <span class="inline-flex items-center gap-2"><EthernetPort size={18} />网口配置</span>
           {/snippet}
         </TabItem>
 
@@ -526,6 +503,21 @@
             on:toast={(event) => showToast(event.detail.text, event.detail.kind)}
             on:statusPoll={startStatusPoll}
             on:statusChanged={loadWifiStatus}
+          />
+        </section>
+
+        <section
+          class="glass-tab-panel"
+          class:glass-tab-panel--active={activeTab === "ethernet"}
+          hidden={activeTab !== "ethernet"}
+          aria-label="网口配置"
+        >
+          <EthernetTab
+            on:toast={(event) => showToast(event.detail.text, event.detail.kind)}
+            on:statusChanged={(event) => {
+              ethernetStatus = event.detail.status;
+              ethernetStatusError = null;
+            }}
           />
         </section>
 

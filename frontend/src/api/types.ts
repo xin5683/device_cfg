@@ -142,7 +142,52 @@ export type TimeSyncResult = {
   output: string;
 };
 
+export type EthernetMode = "dhcp" | "static";
+
+export type EthernetStatus = {
+  iface: string;
+  exists: boolean;
+  operstate: string;
+  carrier?: boolean | null;
+  up: boolean;
+  mac_address?: string | null;
+  ipv4_addresses: string[];
+  primary_ipv4?: string | null;
+  netmask?: string | null;
+  gateway?: string | null;
+  dns_nameservers: string[];
+  rx_packets: number;
+  tx_packets: number;
+  rx_bytes: number;
+  tx_bytes: number;
+  rx_errors: number;
+  tx_errors: number;
+  config_mode?: string | null;
+};
+
+export type EthernetSettings = {
+  mode: EthernetMode;
+  address?: string | null;
+  netmask?: string | null;
+  gateway?: string | null;
+  dns_nameservers: string[];
+};
+
+export type EthernetConfigView = {
+  iface: string;
+  path: string;
+  settings: EthernetSettings;
+  raw: string;
+};
+
+export type EthernetApplyResult = {
+  config: EthernetConfigView;
+  status: EthernetStatus;
+  restart_output: string;
+};
+
 export type DiagnosticStatus = {
   can: CanStatus;
   time: TimeStatus;
+  ethernet: EthernetStatus;
 };

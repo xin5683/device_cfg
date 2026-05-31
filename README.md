@@ -1,6 +1,6 @@
 # Device Config
 
-基于 Rust + axum 的嵌入式设备控制 Web 前后端，当前内置 WiFi 配置能力，适用于 Luckfox Lyra Ultra W、RK 系列等 Linux 设备。
+基于 Rust + axum 的嵌入式设备控制 Web 前后端，当前内置 WiFi 与以太网配置能力，适用于 Luckfox Lyra Ultra W、RK 系列等 Linux 设备。
 
 ## 定位
 
@@ -9,13 +9,15 @@
 - 单一二进制交付，适合设备侧部署
 - 前端静态资源内嵌，无需额外文件系统依赖
 - 后端通过 HTTP API 暴露设备控制能力
-- 当前提供 WiFi 控制，后续可扩展设备概览、诊断工具、日志能力
+- 当前提供 WiFi 与以太网控制，后续可扩展设备概览、诊断工具、日志能力
 
 ## 当前能力
 
 - WiFi 扫描
 - WiFi 连接与断开
 - 当前网络状态查询
+- eth0 Link、启用状态、IP、网关、DNS 与收发统计实时状态
+- eth0 DHCP/静态地址配置并重启网络服务
 - CAN 接口与系统时间实时状态
 - 使用 `ntpd` 手动同步板卡时间
 - 从 GitHub Release 自更新
@@ -87,6 +89,9 @@ ssh root@<board-ip> "sudo env WPA_CTRL_DIR=/run/wpa_supplicant WIFI_IFACE=wlan1 
 - `PORT`：服务端口，默认 `80`
 - `WPA_CTRL_DIR`：`wpa_supplicant` 控制目录，默认 `/var/run/wpa_supplicant`
 - `WIFI_IFACE`：无线网卡接口名，默认 `wlan0`
+- `ETHERNET_IFACE`：以太网接口名，默认 `eth0`
+- `ETHERNET_CONFIG_PATH`：以太网配置文件路径，默认 `/etc/network/interfaces.d/eth0`
+- `NETWORK_RESTART_BIN`：应用网口配置后调用的网络服务脚本，默认 `/etc/init.d/S40network`
 - `UPDATE_REPO_OWNER`：更新仓库 owner，默认 `xin5683`
 - `UPDATE_REPO_NAME`：更新仓库名，默认 `device_cfg`
 - `UPDATE_TARGET`：更新包目标平台，默认当前编译 target
@@ -145,6 +150,41 @@ https://gh.jasonzeng.dev
 
 断开当前 WiFi。
 
+### `GET /api/ethernet/status`
+
+读取以太网接口启用状态、Link 状态、IPv4、网关、DNS、MAC 与收发统计。
+
+### `GET /api/ethernet/config`
+
+读取 `/etc/network/interfaces.d/eth0` 的 DHCP/静态地址配置。
+
+### `POST /api/ethernet/config`
+
+请求体示例：
+
+```json
+{
+  "mode": "static",
+  "address": "192.168.1.100",
+  "netmask": "255.255.255.0",
+  "gateway": "192.168.1.1",
+  "dns_nameservers": ["8.8.8.8", "114.114.114.114"]
+}
+```
+
+静态地址只要求 `address` 和 `netmask`；`gateway` 和 `dns_nameservers` 可为空，留空时不会写入对应配置行。
+
+DHCP 配置可传：
+
+```json
+{
+  "mode": "dhcp",
+  "dns_nameservers": []
+}
+```
+
+接口会写入以太网配置文件，并执行 `/etc/init.d/S40network restart`。
+
 ### `GET /api/update/check`
 
 检查 GitHub Release 是否存在新版本。接口会返回当前版本、最新版本、目标平台、匹配到的 release asset 和按顺序尝试的镜像 URL。
@@ -162,7 +202,7 @@ device_cfg-armv7-unknown-linux-musleabihf.tar.gz
 
 ### `GET /api/diagnostic/status/ws`
 
-WebSocket 推送 CAN 接口状态、RX/TX packets、板卡时间、互联网时间和互联网连接状态，用于首页状态区实时展示。
+WebSocket 推送 CAN 接口状态、RX/TX packets、eth0 Link/IP 状态、板卡时间、互联网时间和互联网连接状态，用于首页状态区实时展示。
 
 ### `POST /api/diagnostic/time/sync`
 
@@ -182,6 +222,7 @@ device_cfg/
 │   ├── app.rs                # 应用启动、配置、路由装配
 │   ├── device/
 │   │   ├── mod.rs
+│   │   ├── ethernet.rs      # 设备以太网状态与配置服务
 │   │   ├── update.rs         # GitHub Release 自更新服务
 │   │   └── wifi.rs           # 设备 WiFi 控制服务
 │   ├── web/
