@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy } from "svelte";
+  import { createEventDispatcher, onDestroy, onMount, tick } from "svelte";
   import { AnsiUp } from "ansi_up";
   import { Button, Card } from "flowbite-svelte";
   import { Download, FileText, Play, RefreshCw, RotateCw, Upload } from "@lucide/svelte";
@@ -28,12 +28,18 @@
   let canUpgrade = false;
   let logTimer: number | undefined;
   let autoStart = false;
+  let logViewport: HTMLPreElement | undefined;
+  let followLatestLogs = true;
 
   $: if (active) {
     startLogPoll();
   } else {
     stopLogPoll();
   }
+
+  onMount(() => {
+    void loadStatus();
+  });
 
   onDestroy(stopLogPoll);
 
@@ -181,9 +187,10 @@
     try {
       const result = await api.startDaemon();
       if (result.success) {
+        resetLogView();
         notify("UDP 网关已启动", "success");
         await loadStatus();
-        await loadLogs(false);
+        await loadLogs(true, true);
       } else {
         notify(`UDP 网关启动失败: ${result.message ?? "未知错误"}`, "error");
       }
@@ -200,9 +207,10 @@
     try {
       const result = await api.restartDaemon();
       if (result.success) {
+        resetLogView();
         notify("UDP 网关已重启", "success");
         await loadStatus();
-        await loadLogs(false);
+        await loadLogs(true, true);
       } else {
         notify(`UDP 网关重启失败: ${result.message ?? "未知错误"}`, "error");
       }
@@ -236,31 +244,66 @@
     }
   }
 
-  export async function loadLogs(silent = false) {
+  export async function loadLogs(silent = false, forceFollow = false) {
     if (!silent) busyAction = "logs";
+    if (forceFollow) followLatestLogs = true;
+
+    const previousScrollTop = logViewport?.scrollTop ?? 0;
+    const shouldPinToBottom = forceFollow || followLatestLogs || isLogAtBottom();
 
     try {
-      const result = await api.daemonLogs(160);
+      const result = await api.daemonLogs(1000);
       if (result.success && result.data) {
-        renderLogText(result.data.lines.length > 0 ? result.data.lines.join("\n") : "暂无日志");
+        await renderLogText(result.data.lines.length > 0 ? result.data.lines.join("\n") : "暂无日志", shouldPinToBottom, previousScrollTop);
       } else {
-        renderLogText(result.message ?? "日志读取失败");
+        await renderLogText(result.message ?? "日志读取失败", shouldPinToBottom, previousScrollTop);
       }
     } catch {
-      renderLogText("日志请求失败");
+      await renderLogText("日志请求失败", shouldPinToBottom, previousScrollTop);
     } finally {
       if (!silent) busyAction = null;
     }
   }
 
-  function renderLogText(text: string) {
+  async function renderLogText(text: string, shouldPinToBottom = followLatestLogs, previousScrollTop = logViewport?.scrollTop ?? 0) {
     logsHtml = ansiUp.ansi_to_html(text);
+    await tick();
+
+    if (!logViewport) return;
+    if (shouldPinToBottom) {
+      scrollLogsToBottom();
+      return;
+    }
+
+    logViewport.scrollTop = previousScrollTop;
+    followLatestLogs = isLogAtBottom();
+  }
+
+  function resetLogView() {
+    followLatestLogs = true;
+    logsHtml = "暂无日志";
+    void tick().then(scrollLogsToBottom);
+  }
+
+  function handleLogScroll() {
+    followLatestLogs = isLogAtBottom();
+  }
+
+  function isLogAtBottom() {
+    if (!logViewport) return true;
+    return logViewport.scrollHeight - logViewport.scrollTop - logViewport.clientHeight <= 16;
+  }
+
+  function scrollLogsToBottom() {
+    if (!logViewport) return;
+    logViewport.scrollTop = logViewport.scrollHeight;
+    followLatestLogs = true;
   }
 
   function startLogPoll() {
     if (logTimer) return;
     void loadStatus();
-    void loadLogs(false);
+    void loadLogs(true);
     logTimer = window.setInterval(() => void loadLogs(true), 2000);
   }
 
@@ -330,6 +373,10 @@
       <DetailRows rows={details} />
     {/if}
 
-    <pre class="glass-terminal mt-5 max-h-96 overflow-auto p-4 text-xs leading-5 text-slate-100">{@html logsHtml}</pre>
+    <pre
+      bind:this={logViewport}
+      class="glass-terminal mt-5 max-h-96 overflow-auto p-4 text-xs leading-5 text-slate-100"
+      onscroll={handleLogScroll}
+    >{@html logsHtml}</pre>
   </div>
 </Card>

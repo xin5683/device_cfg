@@ -1,7 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher, tick } from "svelte";
-  import { Button, Card, Input, Label, Modal } from "flowbite-svelte";
-  import { Lock, LockOpen, Search, WifiOff } from "@lucide/svelte";
+  import { fade, scale } from "svelte/transition";
+  import { Button, Card, Input, Label } from "flowbite-svelte";
+  import { Lock, LockOpen, Search, WifiOff, X } from "@lucide/svelte";
   import SignalBars from "../components/SignalBars.svelte";
   import { api } from "../api/client";
   import type { NetworkInfo } from "../api/types";
@@ -56,6 +57,17 @@
     document.getElementById("wifi-password-input")?.focus();
   }
 
+  function closeConnect() {
+    if (connecting) return;
+    connectOpen = false;
+  }
+
+  function handleConnectKeydown(event: KeyboardEvent) {
+    if (connectOpen && event.key === "Escape") {
+      closeConnect();
+    }
+  }
+
   async function connect() {
     if (!selectedNetwork) return;
     if (!isSelectedOpen && !password) {
@@ -86,6 +98,8 @@
     }
   }
 </script>
+
+<svelte:window onkeydown={handleConnectKeydown} />
 
 <Card class="glass-card max-w-none" size="xl">
   <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -133,30 +147,75 @@
   </div>
 </Card>
 
-<Modal class="glass-modal" bind:open={connectOpen} title={isSelectedOpen ? "连接到开放网络" : "连接到网络"} size="sm">
-  <div class="space-y-5">
-    <div>
-      <p class="text-sm text-slate-600 dark:text-slate-300">网络名称</p>
-      <p class="mt-1 break-words text-lg font-semibold text-slate-950 dark:text-white">{selectedNetwork?.ssid ?? "-"}</p>
-    </div>
+{#if connectOpen}
+  <div class="glass-modal fixed inset-0 z-40 flex items-center justify-center px-4 py-6">
+    <button
+      type="button"
+      class="glass-modal-backdrop"
+      aria-label="关闭连接窗口"
+      onclick={closeConnect}
+      transition:fade={{ duration: 180 }}
+    ></button>
 
-    {#if !isSelectedOpen}
-      <div>
-        <Label for="wifi-password-input" class="mb-2">密码</Label>
-        <Input
-          id="wifi-password-input"
-          type="password"
-          bind:value={password}
-          placeholder="输入网络密码"
-          autocomplete="off"
-          onkeydown={(event) => event.key === "Enter" && connect()}
-        />
+    <div
+      class="glass-card glass-dialog-panel glass-dialog-panel--compact"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wifi-connect-title"
+      tabindex="-1"
+      transition:scale={{ duration: 220, start: 0.96, opacity: 0 }}
+    >
+      <div class="relative flex items-start justify-between gap-4 border-b border-white/35 px-5 py-4 dark:border-white/10">
+        <div class="min-w-0">
+          <h2 id="wifi-connect-title" class="text-lg font-semibold tracking-normal text-slate-950 dark:text-white">
+            {isSelectedOpen ? "连接到开放网络" : "连接到网络"}
+          </h2>
+          <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">确认无线网络信息后建立连接</p>
+        </div>
+        <button
+          type="button"
+          class="glass-icon-button"
+          aria-label="关闭连接窗口"
+          disabled={connecting}
+          onclick={closeConnect}
+        >
+          <X size={18} />
+        </button>
       </div>
-    {/if}
 
-    <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-      <Button class="glass-button" color="alternative" disabled={connecting} onclick={() => (connectOpen = false)}>取消</Button>
-      <Button class="glass-button glass-button--primary" color="alternative" loading={connecting} disabled={connecting} onclick={connect}>连接</Button>
+      <div class="relative space-y-5 p-5">
+        <div class="glass-lens p-4">
+          <p class="relative text-sm text-slate-600 dark:text-slate-300">网络名称</p>
+          <p class="relative mt-1 break-words text-lg font-semibold text-slate-950 dark:text-white">{selectedNetwork?.ssid ?? "-"}</p>
+          <p class="relative mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+            {#if isSelectedOpen}
+              <LockOpen size={13} />
+            {:else}
+              <Lock size={13} />
+            {/if}
+            {selectedNetwork?.security ?? "-"}
+          </p>
+        </div>
+
+        {#if !isSelectedOpen}
+          <div>
+            <Label for="wifi-password-input" class="mb-2">密码</Label>
+            <Input
+              id="wifi-password-input"
+              type="password"
+              bind:value={password}
+              placeholder="输入网络密码"
+              autocomplete="off"
+              onkeydown={(event) => event.key === "Enter" && connect()}
+            />
+          </div>
+        {/if}
+      </div>
+
+      <div class="relative flex flex-col-reverse gap-3 border-t border-white/35 px-5 py-4 sm:flex-row sm:justify-end dark:border-white/10">
+        <Button class="glass-button" color="alternative" disabled={connecting} onclick={closeConnect}>取消</Button>
+        <Button class="glass-button glass-button--primary" color="alternative" loading={connecting} disabled={connecting} onclick={connect}>连接</Button>
+      </div>
     </div>
   </div>
-</Modal>
+{/if}

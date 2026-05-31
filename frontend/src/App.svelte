@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { Badge, Tabs, TabItem, Toast } from "flowbite-svelte";
-  import { Activity, FileText, Radio, Search, Server, Wifi } from "@lucide/svelte";
+  import { fade, scale } from "svelte/transition";
+  import { Badge, Button, Tabs, TabItem, Toast } from "flowbite-svelte";
+  import { Activity, FileText, Radio, RefreshCw, Server, Wifi, X } from "@lucide/svelte";
   import StatusCard from "./components/StatusCard.svelte";
   import WifiTab from "./tabs/WifiTab.svelte";
   import UpdateTab from "./tabs/UpdateTab.svelte";
@@ -20,9 +21,8 @@
   let daemonStatusError: string | null = null;
   let disconnecting = false;
   let startingDaemon = false;
+  let updatePanelOpen = false;
   let statusPollTimer: number | undefined;
-  let pointerFrame: number | undefined;
-  let pendingPointer: { root: HTMLElement; x: number; y: number } | null = null;
   let toastId = 0;
   let toasts: ToastMessage[] = [];
 
@@ -55,9 +55,6 @@
   onDestroy(() => {
     if (statusPollTimer) {
       window.clearInterval(statusPollTimer);
-    }
-    if (pointerFrame) {
-      window.cancelAnimationFrame(pointerFrame);
     }
   });
 
@@ -196,56 +193,18 @@
     }
   }
 
-  function handlePointerMove(event: PointerEvent) {
-    const target = event.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    pendingPointer = { root: target, x: event.clientX, y: event.clientY };
-    target.style.setProperty("--pointer-x", `${event.clientX - rect.left}px`);
-    target.style.setProperty("--pointer-y", `${event.clientY - rect.top}px`);
-    target.style.setProperty("--pointer-active", "1");
-
-    if (!pointerFrame) {
-      pointerFrame = window.requestAnimationFrame(syncLiquidReflections);
+  function handleUpdatePanelKeydown(event: KeyboardEvent) {
+    if (updatePanelOpen && event.key === "Escape") {
+      updatePanelOpen = false;
     }
   }
 
-  function handlePointerLeave(event: PointerEvent) {
-    const target = event.currentTarget as HTMLElement;
-    target.style.setProperty("--pointer-active", "0.42");
-    target
-      .querySelectorAll<HTMLElement>(
-        ".glass-panel, .glass-card, .glass-lens, .glass-list-item, .glass-detail-table, .glass-empty, .glass-badge, .glass-pill, .glass-status-badge"
-      )
-      .forEach((element) => element.style.setProperty("--pointer-active", "0.42"));
-  }
-
-  function syncLiquidReflections() {
-    pointerFrame = undefined;
-    if (!pendingPointer) return;
-
-    const { root, x, y } = pendingPointer;
-    root
-      .querySelectorAll<HTMLElement>(
-        ".glass-panel, .glass-card, .glass-lens, .glass-list-item, .glass-detail-table, .glass-empty, .glass-badge, .glass-pill, .glass-status-badge"
-      )
-      .forEach((element) => {
-        const rect = element.getBoundingClientRect();
-        element.style.setProperty("--pointer-x", `${x - rect.left}px`);
-        element.style.setProperty("--pointer-y", `${y - rect.top}px`);
-        element.style.setProperty("--pointer-active", "1");
-      });
-  }
 </script>
 
-<main
-  class="liquid-app min-h-screen overflow-hidden"
-  style="--pointer-x: 62vw; --pointer-y: 14vh; --pointer-active: 0.56;"
-  onpointermove={handlePointerMove}
-  onpointerleave={handlePointerLeave}
->
-  <div class="liquid-background" aria-hidden="true">
-    <span class="liquid-refraction"></span>
-  </div>
+<svelte:window onkeydown={handleUpdatePanelKeydown} />
+
+<main class="liquid-app min-h-screen overflow-hidden">
+  <div class="liquid-background" aria-hidden="true"></div>
 
   <div class="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-4 sm:gap-6 sm:px-6 sm:py-6 lg:px-8">
     <header class="glass-panel sticky top-3 z-30 px-4 py-4 sm:px-5">
@@ -259,7 +218,18 @@
             <p class="text-sm text-slate-600 dark:text-slate-300">嵌入式设备控制台</p>
           </div>
         </div>
-        <Badge color="blue" class="glass-badge w-fit">版本 {systemVersion}</Badge>
+        <div class="flex flex-wrap items-center gap-2">
+          <Badge color="blue" class="glass-badge w-fit">版本 {systemVersion}</Badge>
+          <Button
+            color="alternative"
+            size="sm"
+            class="glass-button glass-button--primary"
+            onclick={() => (updatePanelOpen = true)}
+          >
+            <RefreshCw size={15} class="mr-2" />
+            更新
+          </Button>
+        </div>
       </div>
     </header>
 
@@ -299,37 +269,17 @@
     </section>
 
     <section class="glass-tabs-shell">
-      <Tabs bind:selected={activeTab} tabStyle="pill" divider={false} contentClass="pt-4">
+      <Tabs bind:selected={activeTab} tabStyle="pill" divider={false} contentClass="hidden">
         <TabItem key="wifi">
           {#snippet titleSlot()}
             <span class="inline-flex items-center gap-2"><Wifi size={18} />无线网络</span>
           {/snippet}
-          <WifiTab
-            on:toast={(event) => showToast(event.detail.text, event.detail.kind)}
-            on:statusPoll={startStatusPoll}
-            on:statusChanged={loadWifiStatus}
-          />
-        </TabItem>
-
-        <TabItem key="update">
-          {#snippet titleSlot()}
-            <span class="inline-flex items-center gap-2"><Search size={18} />系统更新</span>
-          {/snippet}
-          <UpdateTab on:toast={(event) => showToast(event.detail.text, event.detail.kind)} />
         </TabItem>
 
         <TabItem key="daemon">
           {#snippet titleSlot()}
             <span class="inline-flex items-center gap-2"><Server size={18} />UDP 网关</span>
           {/snippet}
-          <DaemonTab
-            active={activeTab === "daemon"}
-            on:toast={(event) => showToast(event.detail.text, event.detail.kind)}
-            on:statusChanged={(event) => {
-              daemonStatus = event.detail.status;
-              daemonStatusError = null;
-            }}
-          />
         </TabItem>
 
         <TabItem key="diagnostic" disabled>
@@ -344,8 +294,71 @@
           {/snippet}
         </TabItem>
       </Tabs>
+
+      <div class="glass-tab-panels">
+        <section
+          class="glass-tab-panel"
+          class:glass-tab-panel--active={activeTab === "wifi"}
+          hidden={activeTab !== "wifi"}
+          aria-label="无线网络"
+        >
+          <WifiTab
+            on:toast={(event) => showToast(event.detail.text, event.detail.kind)}
+            on:statusPoll={startStatusPoll}
+            on:statusChanged={loadWifiStatus}
+          />
+        </section>
+
+        <section
+          class="glass-tab-panel"
+          class:glass-tab-panel--active={activeTab === "daemon"}
+          hidden={activeTab !== "daemon"}
+          aria-label="UDP 网关"
+        >
+          <DaemonTab
+            active={activeTab === "daemon"}
+            on:toast={(event) => showToast(event.detail.text, event.detail.kind)}
+            on:statusChanged={(event) => {
+              daemonStatus = event.detail.status;
+              daemonStatusError = null;
+            }}
+          />
+        </section>
+      </div>
     </section>
   </div>
+
+  {#if updatePanelOpen}
+    <div class="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto px-4 py-6 sm:py-10">
+      <button
+        type="button"
+        class="glass-modal-backdrop"
+        aria-label="关闭更新面板"
+        onclick={() => (updatePanelOpen = false)}
+        transition:fade={{ duration: 180 }}
+      ></button>
+      <div
+        class="glass-dialog-panel glass-dialog-panel--wide"
+        role="dialog"
+        aria-modal="true"
+        aria-label="控制台更新"
+        tabindex="-1"
+        transition:scale={{ duration: 220, start: 0.96, opacity: 0 }}
+      >
+        <div class="mb-2 flex justify-end">
+          <button
+            type="button"
+            class="glass-icon-button"
+            aria-label="关闭更新面板"
+            onclick={() => (updatePanelOpen = false)}
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <UpdateTab on:toast={(event) => showToast(event.detail.text, event.detail.kind)} />
+      </div>
+    </div>
+  {/if}
 
   {#if toasts.length > 0}
     <div class="fixed right-4 top-4 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3">

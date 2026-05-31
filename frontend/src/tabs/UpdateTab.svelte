@@ -12,7 +12,7 @@
   const dispatch = createEventDispatcher<{ toast: { text: string; kind: ToastKind } }>();
 
   let title = "尚未检查更新";
-  let summary = "点击“检查更新”获取最新 release 信息。";
+  let summary = "点击“检查更新”获取控制台程序的最新 release 信息。";
   let details: DetailRow[] = [];
   let updateInfo: UpdateInfo | null = null;
   let checking = false;
@@ -95,7 +95,7 @@
   async function applyUpdate() {
     applying = true;
     title = "正在更新";
-    summary = "正在下载并替换当前程序，请不要断电。";
+    summary = "正在下载并替换当前控制台程序，请不要断电。";
 
     try {
       const result = await api.applyUpdate();
@@ -120,8 +120,8 @@
 <Card class="glass-card max-w-none" size="xl">
   <div class="flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between">
     <div>
-      <h2 class="text-xl font-semibold tracking-normal text-slate-950 dark:text-white">系统更新</h2>
-      <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">从 GitHub Release 获取设备固件包</p>
+      <h2 class="text-xl font-semibold tracking-normal text-slate-950 dark:text-white">控制台更新</h2>
+      <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">从 GitHub Release 获取控制台程序包</p>
     </div>
     <div class="grid gap-3 sm:flex sm:flex-wrap">
       <Button class="glass-button" color="alternative" loading={checking} disabled={checking || applying} onclick={checkUpdate}>

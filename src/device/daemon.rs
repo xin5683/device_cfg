@@ -604,7 +604,7 @@ fn start_daemon(
     }
 
     fs::create_dir_all(&config.install_dir)?;
-    trim_log_file(&config.log_path, config.log_max_lines)?;
+    clear_log_file(&config.log_path)?;
     let stdout = open_log_file(&config.log_path)?;
     let stderr = stdout.try_clone()?;
     let child = Command::new(&executable)
@@ -738,6 +738,19 @@ fn open_log_file(path: &Path) -> Result<File> {
         .append(true)
         .open(path)
         .map_err(UpdateError::from)
+}
+
+fn clear_log_file(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(path)?;
+    Ok(())
 }
 
 fn running_pid(
